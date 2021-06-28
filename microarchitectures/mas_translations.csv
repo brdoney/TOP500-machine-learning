@@ -19,7 +19,7 @@ Xeon [A-Z]55[0-9]{2},Intel Nehalem
 Xeon [A-Z]56[0-9]{2},Intel Westmere
 Xeon E7-4870,Intel Westmere
 # Intel IA-64
-Itanium 2 (?:Montecito)|(?:Dual Core),Montecito
+Itanium ?2(?: Montecito)?(?: Dual Core)?,Montecito
 # Intel MIC
 Intel Xeon Phi 5120D,Many Integrated Cores
 # Intel Xeon Phi
@@ -31,19 +31,26 @@ Intel Xeon Phi 72[0-9]{2}[A-Z]?,Knights Landing
 (?:Sunway|ShenWei)(?: processor)? SW26010,SW26010
 # Power
 (?:IBM )?POWER5,POWER5
+(?:IBM )?Power5,POWER5
 (?:IBM )?POWER6,POWER6
+(?:IBM )?Power6,POWER6
 (?:IBM )?POWER7,POWER7
+(?:IBM )?Power7,POWER7
 (?:IBM )?POWER8,POWER8
+(?:IBM )?Power8,POWER8
 (?:IBM )?POWER8+,POWER8+
+(?:IBM )?Power8+,POWER8+
 (?:IBM )?POWER9,POWER9
+(?:IBM )?Power9,POWER9
 (?:IBM )?POWER10,POWER10
+(?:IBM )?Power10,POWER10
 (?:IBM )?PowerPC 4[0-9]{2},PowerPC 4xx
 (?:IBM )?PowerPC 6[0-9]{2},PowerPC 6xx
 (?:IBM )?PowerPC 7[0-9]{2},PowerPC 7xx
 (?:IBM )?PowerPC 970,PowerPC 970
 (?:IBM )?PowerXCell 8i,CBEA
 # PowerPC
-Power BQC,IBM A2
+(?:Power )?BQC,IBM A2
 # Sparc
 SPARC64 VII,SPARC64 VII
 SPARC64 VIIIfx,SPARC64 VIIIfx

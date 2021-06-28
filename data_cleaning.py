@@ -1,6 +1,6 @@
 import pathlib
 from sklearn.preprocessing import OneHotEncoder
-from typing import Dict, List, Optional, Tuple, cast
+from typing import Dict, List, Optional, Set, Tuple, cast
 import numpy as np
 import pandas as pd
 import re
@@ -114,8 +114,8 @@ def _read_mas_translations() -> Dict[re.Pattern, str]:
     return non_mas_to_mas
 
 
-def _read_already_mas() -> List[str]:
-    return pathlib.Path("./microarchitectures/already_mas.txt").read_text().splitlines()
+def _read_valid_microarchitectures() -> List[str]:
+    return pathlib.Path("./microarchitectures/valid_mas.txt").read_text().splitlines()
 
 
 def create_microarchitecture_col(data: pd.DataFrame) -> pd.DataFrame:
@@ -125,11 +125,11 @@ def create_microarchitecture_col(data: pd.DataFrame) -> pd.DataFrame:
     translations = _read_mas_translations()
 
     # List of names that are already MAS, so that we can skip checking every regex
-    already_mas = _read_already_mas()
+    already_mas = _read_valid_microarchitectures()
 
     # Pattern to remove numbers (make sure process is in format we expect)
     remove_numbers_at_end = re.compile(
-        r"^(.*) (?:(?:[0-9]|\.|-)+C)? (?:[0-9]|\.|-)+G|MHz$")
+        r"(.*) (?:(?:[0-9]|\.|-)+C)? (?:[0-9]|\.|-)+(?:G|M)Hz")
 
     def to_mas(row: pd.Series) -> str:
         processor_tech: str = row["Processor Technology"]
@@ -149,6 +149,8 @@ def create_microarchitecture_col(data: pd.DataFrame) -> pd.DataFrame:
             if pattern.match(processor) is not None:
                 return mas_name
 
+        print(
+            f"Unknown processor: '{processor}', full name: '{row['Processor']}' @ {row['Name']}, {row['Year']}")
         return "Unknown"
 
     # Apply the function to each row to create the column
@@ -212,7 +214,7 @@ def filter_duplicates(testing: pd.DataFrame, training: pd.DataFrame) -> pd.DataF
 def fit_one_hot_encoder() -> OneHotEncoder:
     categorical_cols = {
         "Architecture": ["Cluster", "MPP", "Constellations"],
-        "Microarchitecture": _read_already_mas()
+        "Microarchitecture": _read_valid_microarchitectures()
     }
 
     # Construct a dataframe with all of the values in the specified cols so that we can
@@ -291,6 +293,25 @@ def select_desired_cols(data: pd.DataFrame, dependent_var: str) -> pd.DataFrame:
     return data[desired_cols]
 
 
+def _non_shared_cols(dataframes: List[pd.DataFrame]) -> Set[str]:
+    cols: List[Set[str]] = [set(df.columns) for df in dataframes]
+
+    differences: List[Set[str]] = []
+    for cols_a in cols:
+        for cols_b in cols:
+            if cols_a == cols_b:
+                continue
+
+            differences.append(cols_a.difference(cols_b))
+
+    all_not_shared: Set[str] = set()
+    for diff in differences:
+        all_not_shared.update(diff)
+
+    print(all_not_shared)
+    return all_not_shared
+
+
 if __name__ == "__main__":
     # TODO: Check for duplicates within the dataset
     # TODO: Make IDs translate better across files (use specific columns?)
@@ -298,16 +319,20 @@ if __name__ == "__main__":
     # TODO: Check if already_mas.txt can be subsituted for extracting values from
     #       mas_translations.csv
     # TODO: Remove/extract the dependent variable data from the training data
+    # TODO: Move the ata into one massive set, then do cleaning and the like
 
     data = _read_data("TOP500_files")
-    # testing = _clean_data(data[0])
-    # training = _clean_data(data[1])
-    # training = filter_duplicates(testing, training)
-    # training = select_desired_cols(training, "Log(Rmax)")
 
-    # enc = fit_one_hot_encoder(training)
-    # item = one_hot_encode(training, enc)
+    data = [_clean_data(df) for df in data]
+    _non_shared_cols(data)
+    # # testing = _clean_data(data[0])
+    # # training = _clean_data(data[1])
+    # # training = filter_duplicates(testing, training)
+    # # training = select_desired_cols(training, "Log(Rmax)")
 
-    training = prep_data(data[0], data[1], "Log(Rmax)")[1]
+    # # enc = fit_one_hot_encoder(training)
+    # # item = one_hot_encode(training, enc)
 
-    training.to_csv("results.csv")
+    # training = prep_data(data[0], data[1], "Log(Rmax)")[1]
+
+    # training.to_csv("results.csv")
