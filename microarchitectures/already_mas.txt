@@ -1,0 +1,43 @@
+AMD Zen (Naples)
+AMD Zen-2 (Rome)
+Bulldozer
+CBEA
+IBM A2
+Intel Broadwell
+Intel Cascade lake
+Intel Core
+Intel Haswell
+Intel IvyBridge
+Intel Nehalem
+Intel SandyBridge
+Intel Skylake
+Intel Westmere
+K10
+K8
+Knights Landing
+Many Integrated Cores
+Montecito
+POWER5
+POWER6
+POWER7
+POWER8
+POWER8+
+POWER9
+POWER10
+PowerPC 4xx
+PowerPC 6xx
+PowerPC 7xx
+PowerPC 970
+Piledriver
+SBSA
+SPARC64 IXfx
+SPARC64 VII
+SPARC64 VIIIfx
+SPARC64 XIfx
+SW-1
+SW-2
+SW-3
+SW26010
+Unknown
+Vulcan
+Zen
