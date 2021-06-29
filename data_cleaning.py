@@ -1,29 +1,11 @@
-import pathlib
-from sklearn.preprocessing import OneHotEncoder
-from typing import Dict, List, Optional, Set, Tuple, cast
+import re
+from typing import List, Optional, cast
+
 import numpy as np
 import pandas as pd
-import re
-import csv
 
-
-def _read_data(data_folder_path: str) -> List[pd.DataFrame]:
-    # Directory to scan data files for
-    top500_dir = pathlib.Path(data_folder_path)
-
-    # Exclude the ~FILENAME file Excel generates for open files and include xls or xlsx files
-    excel_file = re.compile(r"[^~].+\.xlsx?")
-
-    all_datasets = []
-    for file in top500_dir.iterdir():
-        if excel_file.match(file.name) is not None:
-            print(file.name)
-            # This is a file we want to process, so read it to dataframe
-            # `read_excel` supports PathLike objects, so ignore typing error
-            curr_data = pd.read_excel(file, header=0)  # type: ignore
-            all_datasets.append(curr_data)
-
-    return all_datasets
+from read_data import (read_data, read_mas_translations,
+                       read_valid_microarchitectures)
 
 
 def _columns_in_frame(data: pd.DataFrame, columns: List[str]) -> Optional[str]:
@@ -99,33 +81,14 @@ def apply_log_transforms(data: pd.DataFrame) -> pd.DataFrame:
     return data
 
 
-def _read_mas_translations() -> Dict[re.Pattern, str]:
-    lines = pathlib.Path(
-        "./microarchitectures/mas_translations.csv").read_text().splitlines()
-
-    # Filter out all comments
-    reader = csv.DictReader(filter(lambda row: row[0] != '#', lines))
-
-    # Create dict where {regex: desired name}
-    non_mas_to_mas = {}
-    for line in reader:
-        compiled = re.compile(line["Non-MAS Regex"])
-        non_mas_to_mas[compiled] = line["MAS"]
-    return non_mas_to_mas
-
-
-def _read_valid_microarchitectures() -> List[str]:
-    return pathlib.Path("./microarchitectures/valid_mas.txt").read_text().splitlines()
-
-
 def create_microarchitecture_col(data: pd.DataFrame) -> pd.DataFrame:
     data = data.copy()
 
     # Translations from non-MAS names to MAS names
-    translations = _read_mas_translations()
+    translations = read_mas_translations()
 
     # List of names that are already MAS, so that we can skip checking every regex
-    already_mas = _read_valid_microarchitectures()
+    already_mas = read_valid_microarchitectures()
 
     # Pattern to remove numbers (make sure process is in format we expect)
     remove_numbers_at_end = re.compile(
@@ -159,7 +122,14 @@ def create_microarchitecture_col(data: pd.DataFrame) -> pd.DataFrame:
     return data
 
 
-def _create_ids_column(data: pd.DataFrame) -> pd.DataFrame:
+def _clean_data(data: pd.DataFrame):
+    data = make_cols_uniform(data)
+    data = apply_log_transforms(data)
+    data = create_microarchitecture_col(data)
+    return data
+
+
+def create_ids_column(data: pd.DataFrame) -> pd.DataFrame:
     data = data.copy()
 
     # NOTE: different datasets might have different numeric columns, throwing off
@@ -193,9 +163,9 @@ def filter_duplicates(testing: pd.DataFrame, training: pd.DataFrame) -> pd.DataF
     :return: the testing dataframe with all duplicates removed
     :rtype: pd.DataFrame
     """
-    # These don't modify in-place, so this won't affect the parameters
-    testing = _create_ids_column(testing)
-    training = _create_ids_column(training)
+    # These don't modify in-place, so this won't affect our parameters
+    testing = create_ids_column(testing)
+    training = create_ids_column(training)
 
     # Common scenarios for duplicate entries are that one machine is added across multiple
     # years with no change in the specs, or one is entered multiple times in the same year
@@ -211,105 +181,55 @@ def filter_duplicates(testing: pd.DataFrame, training: pd.DataFrame) -> pd.DataF
     return filtered_testing
 
 
-def fit_one_hot_encoder() -> OneHotEncoder:
-    categorical_cols = {
-        "Architecture": ["Cluster", "MPP", "Constellations"],
-        "Microarchitecture": _read_valid_microarchitectures()
-    }
-
-    # Construct a dataframe with all of the values in the specified cols so that we can
-    # fit on it
-    df = pd.DataFrame()
-
-    num_rows = max(len(vals) for vals in categorical_cols.values())
-    for col, vals in categorical_cols.items():
-        num_vals = len(vals)
-
-        # How many reps we can cleanly do, then how many are left over to reach the
-        # desired num of cols
-        clean_reps = num_rows // (num_vals)
-        remainder = num_rows % num_vals
-
-        # Each entry corresponds to the repetition of the value at that index in the Series
-        # Cleanly repeat as many values as we can, then cover the remainder with the last val
-        all_reps = [clean_reps] * num_vals
-        all_reps[-1] += remainder
-        vals_col = np.array(vals)
-        vals_series = pd.Series(vals_col).repeat(all_reps).reset_index(drop=True)
-
-        df[col] = vals_series
-
-    encoder = OneHotEncoder(drop="first")
-
-    return encoder.fit(df)
+def one_hot_encode(data: pd.DataFrame) -> pd.DataFrame:
+    categorical_prefixes = {"Architecture": "a", "Microarchitecture": "ma"}
+    return pd.get_dummies(data, columns=categorical_prefixes.keys(), prefix=categorical_prefixes.values(), prefix_sep=":", drop_first=True)
 
 
-def one_hot_encode(data: pd.DataFrame, encoder: OneHotEncoder) -> pd.DataFrame:
-    categorical_cols = ["Architecture", "Microarchitecture"]
-
-    # Transforming returns a csr_matrix, which needs to be turned into a dataframe
-    transformed = encoder.transform(data[categorical_cols]).toarray()  # type: ignore
-    category_names = encoder.get_feature_names()
-    transformed_df = pd.DataFrame(transformed, index=data.index, columns=category_names)
-
-    # Now we need to add our encoding data to the full dataframe
-    all_data = pd.concat([data, transformed_df], axis="columns")
-    all_data = all_data.drop(columns=categorical_cols)
-
-    # return data
-    return all_data
-
-
-def _clean_data(data: pd.DataFrame):
-    data = make_cols_uniform(data)
-    data = apply_log_transforms(data)
-    data = create_microarchitecture_col(data)
-    return data
-
-
-def prep_data(test_data: pd.DataFrame, training_data: pd.DataFrame, dependent_var: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
-    training_data = _clean_data(training_data)
-    test_data = _clean_data(test_data)
-
-    # Take the column's we'll actually be using in testing/training
-    training_data = select_desired_cols(training_data, dependent_var)
-    test_data = select_desired_cols(test_data, dependent_var)
-
-    # Has to be done after selecting desired cols so that IDs translate across datasets
-    test_data = filter_duplicates(test_data, training_data)
-
-    # One-hot encode training and testing data using the same encoder, so that their
-    # resulting col labels will be the same
-    enc = fit_one_hot_encoder()
-    training_data = one_hot_encode(training_data, enc)
-    test_data = one_hot_encode(test_data, enc)
-
-    return (test_data, training_data)
-
-
-def select_desired_cols(data: pd.DataFrame, dependent_var: str) -> pd.DataFrame:
+def _select_desired_cols(data: pd.DataFrame, dependent_var: str) -> pd.DataFrame:
     desired_cols = ["Architecture", "Microarchitecture", "Year", "Processor Speed (MHz)",
                     "Total Cores", "Accelerator/Co-Processor Cores", dependent_var]
     return data[desired_cols]
 
 
-def _non_shared_cols(dataframes: List[pd.DataFrame]) -> Set[str]:
-    cols: List[Set[str]] = [set(df.columns) for df in dataframes]
+def _combine_raw_data(raw_dataframes: List[pd.DataFrame], dependent_var: str) -> pd.DataFrame:
+    """
+    Combine the raw dataframes into a single, large dataframe.
 
-    differences: List[Set[str]] = []
-    for cols_a in cols:
-        for cols_b in cols:
-            if cols_a == cols_b:
-                continue
+    Notably, the dataset will have the cleaned version of only the data we are interested
+    in for the model, since this is necessary to make the combination of the datasets
+    possible.
 
-            differences.append(cols_a.difference(cols_b))
+    :param raw_dataframes: the list of dataframes that we wish to combine into one
+    :type raw_dataframes: List[pd.DataFrame]
+    :param dependent_var: the dependent variable that we are interested in, so that we
+    don't remove its column
+    :type dependent_var: str
+    :return: the dataframe that is made up of the contents of all of the raw dataframes
+    :rtype: pd.DataFrame
+    """
+    # Concatenate all the rows, ignoring the index so we don't try merging rows from each
+    # dataframe at all (essentialy, we're just appending them)
+    dataframes = [_clean_data(df) for df in raw_dataframes]
+    dataframes = [_select_desired_cols(df, dependent_var) for df in dataframes]
 
-    all_not_shared: Set[str] = set()
-    for diff in differences:
-        all_not_shared.update(diff)
+    return pd.concat(dataframes, ignore_index=True)
 
-    print(all_not_shared)
-    return all_not_shared
+
+def get_data(dependent_var: str) -> pd.DataFrame:
+    """
+    Get the dataframe of the TOP500 data we are interested in, already cleaned and one-hot
+    encoded.
+
+    :param dependent_var: the dependent varible to use, so that it is include in the dataframe
+    :type dependent_var: str
+    :return: the dataframe with all of the cleaned and encoded data
+    :rtype: pd.DataFrame
+    """
+    data = read_data("./TOP500_files/")
+    data = _combine_raw_data(data, dependent_var)
+    data = one_hot_encode(data)
+    return data
 
 
 if __name__ == "__main__":
@@ -321,17 +241,22 @@ if __name__ == "__main__":
     # TODO: Remove/extract the dependent variable data from the training data
     # TODO: Move the ata into one massive set, then do cleaning and the like
 
-    data = _read_data("TOP500_files")
+    data = get_data("Log(Rmax)")
+    data.to_csv("results.csv")
 
-    data = [_clean_data(df) for df in data]
-    _non_shared_cols(data)
-    # # testing = _clean_data(data[0])
-    # # training = _clean_data(data[1])
-    # # training = filter_duplicates(testing, training)
-    # # training = select_desired_cols(training, "Log(Rmax)")
+    # data = read_data("./TOP500_files/")
+    # df = _combine_raw_data(data, "Log(Rmax)")
+    # df = one_hot_encode(df)
+    # df.to_csv("results.csv")
 
-    # # enc = fit_one_hot_encoder(training)
-    # # item = one_hot_encode(training, enc)
+    # Run to see a sample cleaned dataframe
+    # testing = _clean_data(data[0])
+    # training = _clean_data(data[1])
+    # training = filter_duplicates(testing, training)
+    # training = select_desired_cols(training, "Log(Rmax)")
+
+    # enc = fit_one_hot_encoder(training)
+    # item = one_hot_encode(training, enc)
 
     # training = prep_data(data[0], data[1], "Log(Rmax)")[1]
 
