@@ -8,5 +8,10 @@ __pycache__/
 .vscode/
 .vim/
 
+# Excel files
+~$*.xls
+~$*.xlsx
+results.csv
+
 # OS files
 .DS_Store

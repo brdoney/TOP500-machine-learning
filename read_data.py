@@ -7,6 +7,18 @@ import pandas as pd
 
 
 def read_data(data_folder_path: str) -> List[pd.DataFrame]:
+    """
+    Read all of the excel files (.xlx or .xlsx) in the given folder and turn them into
+    dataframes.
+
+    This function does not walk through the given directory in search of files, so it will
+    only check the given folder and not in any sub-folders the given folder contains.
+
+    :param data_folder_path: the path to look in for Excel files
+    :type data_folder_path: str
+    :return: a list of the dataframes describing the data in the files
+    :rtype: List[pd.DataFrame]
+    """
     # Directory to scan data files for
     top500_dir = pathlib.Path(data_folder_path)
 
@@ -26,6 +38,13 @@ def read_data(data_folder_path: str) -> List[pd.DataFrame]:
 
 
 def read_mas_translations() -> Dict[re.Pattern, str]:
+    """
+    Read file of regex patterns to valid microarchitecture labels into a dictionary and
+    return it.
+
+    :return: a dictionary of regex pattern and its corresponding microarchitecture label.
+    :rtype: Dict[re.Pattern, str]
+    """
     lines = pathlib.Path(
         "./microarchitectures/mas_translations.csv").read_text().splitlines()
 
@@ -41,4 +60,10 @@ def read_mas_translations() -> Dict[re.Pattern, str]:
 
 
 def read_valid_microarchitectures() -> List[str]:
+    """
+    Read the file of the list of valid microarchitectures and return it.
+
+    :return: a list of valid microarchitectures
+    :rtype: List[str]
+    """
     return pathlib.Path("./microarchitectures/valid_mas.txt").read_text().splitlines()

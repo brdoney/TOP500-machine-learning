@@ -1,4 +1,4 @@
-from data_cleaning import _clean_data
+from data_cleaning import _individual_df_cleaning
 from read_data import read_data
 from typing import List, Set
 
@@ -25,5 +25,5 @@ def non_shared_cols(dataframes: List[pd.DataFrame]) -> Set[str]:
 
 if __name__ == "__main__":
     data = read_data("./TOP500_files/")
-    data = [_clean_data(df) for df in data]
+    data = [_individual_df_cleaning(df) for df in data]
     print(non_shared_cols(data))

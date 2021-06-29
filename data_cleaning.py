@@ -4,18 +4,41 @@ from typing import List, Optional, cast
 import numpy as np
 import pandas as pd
 
-from read_data import (read_data, read_mas_translations,
-                       read_valid_microarchitectures)
+from read_data import read_data, read_mas_translations, read_valid_microarchitectures
 
 
 def _columns_in_frame(data: pd.DataFrame, columns: List[str]) -> Optional[str]:
+    """
+    Return the first of the given columns that is a valid column in the dataframe, or
+    `None` if none of them are.
+
+    :param data: the dataframe to check the columns of
+    :type data: pd.DataFrame
+    :param columns: the columns that we are looking for at least one of
+    :type columns: List[str]
+    :return: the first column that is a valid column in the dataframe
+    :rtype: Optional[str]
+    """
     for col in columns:
         if col in data.columns:
             return col
     return None
 
 
-def make_cols_uniform(data: pd.DataFrame) -> pd.DataFrame:
+def _make_cols_uniform(data: pd.DataFrame) -> pd.DataFrame:
+    """
+    Make columns uniform in terms of the units and names. This is to counteract changes in
+    the TOP500 dataset over the years.
+
+    NOTE: There are more inconsistencies across datasets than this function fixes, because
+    this function is primarily concerned with the data that we will use in the model. So,
+    if the intention is to use other columns, more fixes may need to be added.
+
+    :param data: the dataframe to pull data from
+    :type data: pd.DataFrame
+    :return: a copy of the dataframe with uniform columns
+    :rtype: pd.DataFrame
+    """
     # TODO: Determine whether having efficiency and Rmax with the same units will
     # boost performance
 
@@ -68,7 +91,16 @@ def make_cols_uniform(data: pd.DataFrame) -> pd.DataFrame:
     return data
 
 
-def apply_log_transforms(data: pd.DataFrame) -> pd.DataFrame:
+def _apply_log_transforms(data: pd.DataFrame) -> pd.DataFrame:
+    """
+    Apply log transforms to the Rmax and Power Efficiency columns and add them into a new
+    dataset. The transformed columns will be named `"Log(Rmax)"` and `Log(Efficiency)"`.
+
+    :param data: the dataframe to pull data from
+    :type data: pd.DataFrame
+    :return: a copy of the dataframe with the Rmax and Power Efficiency columns log transformed
+    :rtype: pd.DataFrame
+    """
     rename_map = {
         "Rmax [TFlop/s]": "Log(Rmax)",
         "Power Efficiency [GFlops/Watts]": "Log(Efficiency)"
@@ -81,7 +113,16 @@ def apply_log_transforms(data: pd.DataFrame) -> pd.DataFrame:
     return data
 
 
-def create_microarchitecture_col(data: pd.DataFrame) -> pd.DataFrame:
+def _create_microarchitecture_col(data: pd.DataFrame) -> pd.DataFrame:
+    """
+    Create the `"Microarchitecture"` column by extracting data from each entry's processor.
+
+    :param data: the dataframe to pull data from
+    :type data: pd.DataFrame
+    :raises ValueError: if a processor is not in the format that we expect
+    :return: a copy of the dataframe with the `"Microarchitecture"` column added
+    :rtype: pd.DataFrame
+    """
     data = data.copy()
 
     # Translations from non-MAS names to MAS names
@@ -112,8 +153,12 @@ def create_microarchitecture_col(data: pd.DataFrame) -> pd.DataFrame:
             if pattern.match(processor) is not None:
                 return mas_name
 
-        print(
-            f"Unknown processor: '{processor}', full name: '{row['Processor']}' @ {row['Name']}, {row['Year']}")
+        # Print out diagnostic information about the processor, since it had no match
+        full = row["Processor"]
+        name = row["Name"]
+        year = row["Year"]
+        print(f"Unknown processor: '{processor}', full name: '{full}' @ {name}, {year}")
+
         return "Unknown"
 
     # Apply the function to each row to create the column
@@ -122,14 +167,37 @@ def create_microarchitecture_col(data: pd.DataFrame) -> pd.DataFrame:
     return data
 
 
-def _clean_data(data: pd.DataFrame):
-    data = make_cols_uniform(data)
-    data = apply_log_transforms(data)
-    data = create_microarchitecture_col(data)
+def _individual_df_cleaning(data: pd.DataFrame) -> pd.DataFrame:
+    """
+    Prep an individual dataframe by making its columns use the units we want and have the
+    right labels, apply log transforms to Rmax and Effeciency, and create the
+    microarchitecture column.
+
+    Important other steps in the cleaning process are filtering duplicates and
+    standardization/normalization, but they require all of the data to be done
+    succesfully, so they are ommited from this function.
+
+    :param data: the dataframe to clean
+    :type data: pd.DataFrame
+    :return: a copy of the dataframe, cleaned
+    :rtype: pd.DataFrame
+    """
+    data = _make_cols_uniform(data)
+    data = _apply_log_transforms(data)
+    data = _create_microarchitecture_col(data)
     return data
 
 
-def create_ids_column(data: pd.DataFrame) -> pd.DataFrame:
+def _create_ids_column(data: pd.DataFrame) -> pd.DataFrame:
+    """
+    Create the `"ID"` column, where an ID is simply each of the numerical columns in the
+    dataframe concatenated string-wise.
+
+    :param data: the dataframe to pull data from
+    :type data: pd.DataFrame
+    :return: a copy of the dataframe with a ID column added
+    :rtype: pd.DataFrame
+    """
     data = data.copy()
 
     # NOTE: different datasets might have different numeric columns, throwing off
@@ -164,8 +232,8 @@ def filter_duplicates(testing: pd.DataFrame, training: pd.DataFrame) -> pd.DataF
     :rtype: pd.DataFrame
     """
     # These don't modify in-place, so this won't affect our parameters
-    testing = create_ids_column(testing)
-    training = create_ids_column(training)
+    testing = _create_ids_column(testing)
+    training = _create_ids_column(training)
 
     # Common scenarios for duplicate entries are that one machine is added across multiple
     # years with no change in the specs, or one is entered multiple times in the same year
@@ -182,13 +250,58 @@ def filter_duplicates(testing: pd.DataFrame, training: pd.DataFrame) -> pd.DataF
 
 
 def one_hot_encode(data: pd.DataFrame) -> pd.DataFrame:
+    """
+    Return a copy of the dataset with the Architecture and Microarchitecture columns
+    one-hot encoded.
+
+    If using this function on multiple datasets, the order of the columns and the dropped
+    dummy variable are not guaranteed to be the same.
+
+    :param data: the dataframe to pull data from
+    :type data: pd.DataFrame
+    :return: a copy of the dataframe, with the categorical columns encoded
+    :rtype: pd.DataFrame
+    """
     categorical_prefixes = {"Architecture": "a", "Microarchitecture": "ma"}
-    return pd.get_dummies(data, columns=categorical_prefixes.keys(), prefix=categorical_prefixes.values(), prefix_sep=":", drop_first=True)
+    return pd.get_dummies(
+        data,
+        columns=categorical_prefixes.keys(),
+        prefix=categorical_prefixes.values(),
+        prefix_sep=":",
+        drop_first=True,
+    )
 
 
 def _select_desired_cols(data: pd.DataFrame, dependent_var: str) -> pd.DataFrame:
-    desired_cols = ["Architecture", "Microarchitecture", "Year", "Processor Speed (MHz)",
-                    "Total Cores", "Accelerator/Co-Processor Cores", dependent_var]
+    """
+    Select the desired columns from the dataset, including the given dependent variable,
+    and move them into a new dataset.
+
+    Specifically, the resulting dataset will include the
+    * Architecture
+    * Microarchitecture
+    * Year
+    * Processor Speed (MHz)
+    * Total Cores
+    * Accelerator/Co-Processor Cores
+    * The specified dependent variable column
+
+    :param data: the dataframe to pull data from
+    :type data: pd.DataFrame
+    :param dependent_var: the dependent variable that we want included in the resulting dataset
+    :type dependent_var: str
+    :return: a copy of the dataframe, with only the desired columns
+    :rtype: pd.DataFrame
+    """
+    desired_cols = [
+        "Architecture",
+        "Microarchitecture",
+        "Year",
+        "Processor Speed (MHz)",
+        "Total Cores",
+        "Accelerator/Co-Processor Cores",
+        dependent_var,
+    ]
     return data[desired_cols]
 
 
@@ -210,7 +323,7 @@ def _combine_raw_data(raw_dataframes: List[pd.DataFrame], dependent_var: str) ->
     """
     # Concatenate all the rows, ignoring the index so we don't try merging rows from each
     # dataframe at all (essentialy, we're just appending them)
-    dataframes = [_clean_data(df) for df in raw_dataframes]
+    dataframes = [_individual_df_cleaning(df) for df in raw_dataframes]
     dataframes = [_select_desired_cols(df, dependent_var) for df in dataframes]
 
     return pd.concat(dataframes, ignore_index=True)
@@ -226,6 +339,7 @@ def get_data(dependent_var: str) -> pd.DataFrame:
     :return: the dataframe with all of the cleaned and encoded data
     :rtype: pd.DataFrame
     """
+    # TODO: Standardize/normalize the data as well
     data = read_data("./TOP500_files/")
     data = _combine_raw_data(data, dependent_var)
     data = one_hot_encode(data)
@@ -239,25 +353,9 @@ if __name__ == "__main__":
     # TODO: Check if already_mas.txt can be subsituted for extracting values from
     #       mas_translations.csv
     # TODO: Remove/extract the dependent variable data from the training data
-    # TODO: Move the ata into one massive set, then do cleaning and the like
 
+    # Run to see the dataset in results.csv
     data = get_data("Log(Rmax)")
     data.to_csv("results.csv")
 
-    # data = read_data("./TOP500_files/")
-    # df = _combine_raw_data(data, "Log(Rmax)")
-    # df = one_hot_encode(df)
-    # df.to_csv("results.csv")
-
-    # Run to see a sample cleaned dataframe
-    # testing = _clean_data(data[0])
-    # training = _clean_data(data[1])
-    # training = filter_duplicates(testing, training)
-    # training = select_desired_cols(training, "Log(Rmax)")
-
-    # enc = fit_one_hot_encoder(training)
-    # item = one_hot_encode(training, enc)
-
-    # training = prep_data(data[0], data[1], "Log(Rmax)")[1]
-
-    # training.to_csv("results.csv")
+    # After getting data, do train/test splits and filter for duplicates
