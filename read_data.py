@@ -6,7 +6,7 @@ from typing import Dict, List
 import pandas as pd
 
 
-def read_data(data_folder_path: str) -> List[pd.DataFrame]:
+def read_data() -> List[pd.DataFrame]:
     """
     Read all of the excel files (.xlx or .xlsx) in the given folder and turn them into
     dataframes.
@@ -20,7 +20,7 @@ def read_data(data_folder_path: str) -> List[pd.DataFrame]:
     :rtype: List[pd.DataFrame]
     """
     # Directory to scan data files for
-    top500_dir = pathlib.Path(data_folder_path)
+    top500_dir = pathlib.Path("./TOP500_files/")
 
     # Exclude the ~FILENAME file Excel generates for open files and include xls or xlsx files
     excel_file = re.compile(r"[^~].+\.xlsx?")

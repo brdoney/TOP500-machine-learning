@@ -4,6 +4,9 @@ from typing import List, Optional, cast
 import numpy as np
 import pandas as pd
 
+from sklearn.base import TransformerMixin
+from sklearn.preprocessing import RobustScaler
+
 from read_data import read_data, read_mas_translations, read_valid_microarchitectures
 
 
@@ -39,9 +42,6 @@ def _make_cols_uniform(data: pd.DataFrame) -> pd.DataFrame:
     :return: a copy of the dataframe with uniform columns
     :rtype: pd.DataFrame
     """
-    # TODO: Determine whether having efficiency and Rmax with the same units will
-    # boost performance
-
     # Modify a copy
     data = data.copy()
 
@@ -329,20 +329,28 @@ def _combine_raw_data(raw_dataframes: List[pd.DataFrame], dependent_var: str) ->
     return pd.concat(dataframes, ignore_index=True)
 
 
-def get_data(dependent_var: str) -> pd.DataFrame:
+def standardize_data(dataframe: pd.DataFrame, scaler: TransformerMixin) -> pd.DataFrame:
+    # Create a new dataframe that uses the standardized data
+    standardized = scaler.fit_transform(dataframe)
+    return pd.DataFrame(
+        standardized, columns=dataframe.columns, index=dataframe.index
+    )
+
+
+def get_data(dependent_var: str, scaler: TransformerMixin) -> pd.DataFrame:
     """
-    Get the dataframe of the TOP500 data we are interested in, already cleaned and one-hot
-    encoded.
+    Get the dataframe of the TOP500 data we are interested in, already cleaned, one-hot
+    encoded, and standardized.
 
     :param dependent_var: the dependent varible to use, so that it is include in the dataframe
     :type dependent_var: str
     :return: the dataframe with all of the cleaned and encoded data
     :rtype: pd.DataFrame
     """
-    # TODO: Standardize/normalize the data as well
-    data = read_data("./TOP500_files/")
-    data = _combine_raw_data(data, dependent_var)
+    all_data = read_data()
+    data = _combine_raw_data(all_data, dependent_var)
     data = one_hot_encode(data)
+    data = standardize_data(data, scaler)
     return data
 
 
@@ -352,10 +360,12 @@ if __name__ == "__main__":
     # TODO: Check if using Accelerator cores as a fraction improves performance
     # TODO: Check if already_mas.txt can be subsituted for extracting values from
     #       mas_translations.csv
-    # TODO: Remove/extract the dependent variable data from the training data
+    # TODO: Try log-transforming the number of cores
+    # TODO: Determine whether having efficiency and Rmax with the same units will
+    #       boost performance
 
     # Run to see the dataset in results.csv
-    data = get_data("Log(Rmax)")
+    data = get_data("Log(Rmax)", RobustScaler())
     data.to_csv("results.csv")
 
     # After getting data, do train/test splits and filter for duplicates
