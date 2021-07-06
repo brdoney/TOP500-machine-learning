@@ -188,65 +188,27 @@ def _individual_df_cleaning(data: pd.DataFrame) -> pd.DataFrame:
     return data
 
 
-def _create_ids_column(data: pd.DataFrame) -> pd.DataFrame:
+def filter_duplicates(dataframe: pd.DataFrame) -> pd.DataFrame:
     """
-    Create the `"ID"` column, where an ID is simply each of the numerical columns in the
-    dataframe concatenated string-wise.
+    Return a copy of the dataset with all duplicates filtered.
 
-    :param data: the dataframe to pull data from
-    :type data: pd.DataFrame
-    :return: a copy of the dataframe with a ID column added
+    The year column is excluded in evaluation of duplicate rows. In other words, a row can
+    be considered a duplicate if all of its values are the same as another's, excluding
+    its year value.
+
+    :param dataframe: the dataframe to pull data from
+    :type dataframe: pd.DataFrame
+    :return: a copy of the dataframe, with duplicates removed
     :rtype: pd.DataFrame
     """
-    data = data.copy()
+    rows_before = len(dataframe)
+    # Don't use year because we want to filter systems that are entered multiple years
+    # without changes
+    excluding_year = dataframe.columns.difference(["Year"])
+    dataframe = dataframe.drop_duplicates(subset=excluding_year)
 
-    # NOTE: different datasets might have different numeric columns, throwing off
-    # duplicate filtering with IDs
-    numeric_data = data.select_dtypes("number").dropna(axis="columns")
-
-    def get_row_id(row: pd.Series) -> str:
-        # Concatenate each of the numeric columns in the data to get the ID
-        row_id = ""
-        for col in numeric_data.columns:
-            row_id += str(round(row[col], 3))  # type: ignore
-        return row_id
-
-    data["ID"] = numeric_data.apply(get_row_id, axis=1)
-
-    return data
-
-
-def filter_duplicates(testing: pd.DataFrame, training: pd.DataFrame) -> pd.DataFrame:
-    """
-    Removes any entries in the testing dataframe that also occur in the training dataframe.
-
-    NOTE: This should only be applied after unecessary columns/features have been removed from
-    the dataset, as it will use all numeric columns when evaluating whether two rows are
-    identical.
-
-    :param testing: the dataframe to remove duplicates from
-    :type testing: pd.DataFrame
-    :param training: the dataframe to use as a source to check for duplicates
-    :type training: pd.DataFrame
-    :return: the testing dataframe with all duplicates removed
-    :rtype: pd.DataFrame
-    """
-    # These don't modify in-place, so this won't affect our parameters
-    testing = _create_ids_column(testing)
-    training = _create_ids_column(training)
-
-    # Common scenarios for duplicate entries are that one machine is added across multiple
-    # years with no change in the specs, or one is entered multiple times in the same year
-    training_ids = set(training["ID"])
-
-    # Filter out anything in the list of training ids by boolean indexing
-    not_in_training_ids = ~testing["ID"].isin(training_ids)
-    filtered_testing = cast(pd.DataFrame, testing[not_in_training_ids])
-
-    # Get rid of the ID column in the returnd dataframe, so that it isn't used for testing
-    filtered_testing.drop(columns=["ID"])
-
-    return filtered_testing
+    print(f"Filtered duplicates to go from {rows_before} rows to {len(dataframe)}")
+    return dataframe
 
 
 def one_hot_encode(data: pd.DataFrame) -> pd.DataFrame:
@@ -329,12 +291,44 @@ def _combine_raw_data(raw_dataframes: List[pd.DataFrame], dependent_var: str) ->
     return pd.concat(dataframes, ignore_index=True)
 
 
-def standardize_data(dataframe: pd.DataFrame, scaler: TransformerMixin) -> pd.DataFrame:
-    # Create a new dataframe that uses the standardized data
-    standardized = scaler.fit_transform(dataframe)
-    return pd.DataFrame(
-        standardized, columns=dataframe.columns, index=dataframe.index
-    )
+def standardize_data(
+    dataframe: pd.DataFrame, scaler: TransformerMixin, dependent_var: str
+) -> pd.DataFrame:
+    """
+    Create and return a new dataframe using the data from the given dataframe standardized
+    using the given scaler. Does not standardize the dependent variable column.
+
+    :param dataframe: the dataframe to pull data from
+    :type dataframe: pd.DataFrame
+    :param scaler: the scaler to use to standardize the data
+    :type scaler: TransformerMixin
+    :param dependent_var: the dependent variable to not standardize
+    :type dependent_var: str
+    :return: a copy of the dataframe, with its data standardized
+    :rtype: pd.DataFrame
+    """
+    dataframe = dataframe.copy()
+
+    # Don't standardize the dependent variable, so it can translate across data sets
+    to_standardize = dataframe.columns.difference([dependent_var])
+    dataframe[to_standardize] = scaler.fit_transform(dataframe[to_standardize])
+
+    return dataframe
+
+
+def remove_nan_rows(dataframe: pd.DataFrame) -> pd.DataFrame:
+    """
+    Return a copy of the dataframe with all rows containing NaN removed.
+
+    This is particularly useful when run as the last step of the data cleaning process,
+    after all of the unecessary columns (which may contain NaN values) have been removed.
+
+    :param dataframe: the dataframe to pull data from
+    :type dataframe: pd.DataFrame
+    :return: a copy of the dataframe, with rows containing NaN values removed
+    :rtype: pd.DataFrame
+    """
+    return dataframe.dropna()
 
 
 def get_data(dependent_var: str, scaler: TransformerMixin) -> pd.DataFrame:
@@ -348,15 +342,15 @@ def get_data(dependent_var: str, scaler: TransformerMixin) -> pd.DataFrame:
     :rtype: pd.DataFrame
     """
     all_data = read_data()
-    data = _combine_raw_data(all_data, dependent_var)
-    data = one_hot_encode(data)
-    data = standardize_data(data, scaler)
-    return data
+    df = _combine_raw_data(all_data, dependent_var)
+    df = remove_nan_rows(df)
+    df = filter_duplicates(df)
+    df = one_hot_encode(df)
+    df = standardize_data(df, scaler, dependent_var)
+    return df
 
 
 if __name__ == "__main__":
-    # TODO: Check for duplicates within the dataset
-    # TODO: Make IDs translate better across files (use specific columns?)
     # TODO: Check if using Accelerator cores as a fraction improves performance
     # TODO: Check if already_mas.txt can be subsituted for extracting values from
     #       mas_translations.csv
