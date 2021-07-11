@@ -167,6 +167,22 @@ def _create_microarchitecture_col(data: pd.DataFrame) -> pd.DataFrame:
     return data
 
 
+def _create_coprocessor_ratio_col(data: pd.DataFrame) -> pd.DataFrame:
+    """
+    Create `"Co-Processor Cores to Total Cores"` columns as a ratio of the
+    `"Accelerator/Co-Processor Cores"` / `"Total Cores"`.
+
+    :param data: the dataframe to pull data from
+    :type data: pd.DataFrame
+    :return: a copy of the dataframe with the coprocessor ration column added
+    :rtype: pd.DataFrame
+    """
+    data = data.copy()
+    data["Co-Processor Cores to Total Cores"] = \
+        data["Accelerator/Co-Processor Cores"] / data["Total Cores"]
+    return data
+
+
 def _individual_df_cleaning(data: pd.DataFrame) -> pd.DataFrame:
     """
     Prep an individual dataframe by making its columns use the units we want and have the
@@ -185,6 +201,7 @@ def _individual_df_cleaning(data: pd.DataFrame) -> pd.DataFrame:
     data = _make_cols_uniform(data)
     data = _apply_log_transforms(data)
     data = _create_microarchitecture_col(data)
+    data = _create_coprocessor_ratio_col(data)
     return data
 
 
@@ -261,10 +278,10 @@ def _select_desired_cols(data: pd.DataFrame, dependent_var: str) -> pd.DataFrame
         "Year",
         "Processor Speed (MHz)",
         "Total Cores",
-        "Accelerator/Co-Processor Cores",
+        "Co-Processor Cores to Total Cores",
         dependent_var,
     ]
-    return data[desired_cols]
+    return data[desired_cols].copy()
 
 
 def _combine_raw_data(raw_dataframes: List[pd.DataFrame], dependent_var: str) -> pd.DataFrame:
@@ -285,10 +302,13 @@ def _combine_raw_data(raw_dataframes: List[pd.DataFrame], dependent_var: str) ->
     """
     # Concatenate all the rows, ignoring the index so we don't try merging rows from each
     # dataframe at all (essentialy, we're just appending them)
-    dataframes = [_individual_df_cleaning(df) for df in raw_dataframes]
-    dataframes = [_select_desired_cols(df, dependent_var) for df in dataframes]
+    processed: List[pd.DataFrame] = []
+    for df in raw_dataframes:
+        df = _individual_df_cleaning(df)
+        df = _select_desired_cols(df, dependent_var)
+        processed.append(df)
 
-    return pd.concat(dataframes, ignore_index=True)
+    return pd.concat(processed, ignore_index=True)
 
 
 def standardize_data(
