@@ -1,10 +1,9 @@
 import re
-from typing import List, Optional, cast
+from typing import Any, List, Optional, Protocol, Tuple, cast
 
 import numpy as np
 import pandas as pd
 
-from sklearn.base import TransformerMixin
 from sklearn.preprocessing import RobustScaler
 
 from read_data import read_data, read_mas_translations, read_valid_microarchitectures
@@ -82,9 +81,9 @@ def _make_cols_uniform(data: pd.DataFrame) -> pd.DataFrame:
     # Do the rename, now that we have done the unit conversions
     data = data.rename(columns=renaming_mapping)  # type: ignore
 
-    # This will select all the accelerator data, since we've done the renaming
-    # For accelerator data, we have to assume an omission means 0, since data varies
-    # significantly by system (can't interpolate)
+    # Inspecting the datasets shows that an omission of accelerator cores corresponds with
+    # having no accelerator, so we can fill in 0 for all missing values (there are some
+    # outliers, but this holds the vast majority of the time)
     data["Accelerator/Co-Processor Cores"] = data["Accelerator/Co-Processor Cores"].fillna(
         value=0)  # type: ignore
 
@@ -172,6 +171,12 @@ def _create_coprocessor_ratio_col(data: pd.DataFrame) -> pd.DataFrame:
     Create `"Co-Processor Cores to Total Cores"` columns as a ratio of the
     `"Accelerator/Co-Processor Cores"` / `"Total Cores"`.
 
+    It is important to note that the total number of cores does not actually include the
+    number of co-processor cores in its count. However, having more co-processor cores
+    than CPU cores appears uncommonly, so it serves as a good way to make the number of
+    co-processor cores a reasonable fraction, as standardizing or scaling would otherwise
+    be difficult.
+
     :param data: the dataframe to pull data from
     :type data: pd.DataFrame
     :return: a copy of the dataframe with the coprocessor ration column added
@@ -207,11 +212,16 @@ def _individual_df_cleaning(data: pd.DataFrame) -> pd.DataFrame:
 
 def filter_duplicates(dataframe: pd.DataFrame) -> pd.DataFrame:
     """
-    Return a copy of the dataset with all duplicates filtered.
+    Return a copy of the dataset with all duplicates filtered, keeping only the first item
+    in a pair of duplicates.
 
     The year column is excluded in evaluation of duplicate rows. In other words, a row can
     be considered a duplicate if all of its values are the same as another's, excluding
     its year value.
+
+    It is important to note that the "first" item in a pair of duplicates is not based on
+    date or year, but rather on which row occurs earlier in the dataframe (in other words,
+    the dataframe's index is used).
 
     :param dataframe: the dataframe to pull data from
     :type dataframe: pd.DataFrame
@@ -311,19 +321,34 @@ def _combine_raw_data(raw_dataframes: List[pd.DataFrame], dependent_var: str) ->
     return pd.concat(processed, ignore_index=True)
 
 
+class Transformer(Protocol):
+    """
+    Protocol to describe the transformers/scalers in the sklearn.preprocessing package,
+    such as StandardScaler and OneHotEncoder.
+    """
+
+    def fit(self: Any, X: Any, y=None) -> Any:
+        ...
+
+    def transform(self, X: Any) -> Any:
+        ...
+
+
 def standardize_data(
-    dataframe: pd.DataFrame, scaler: TransformerMixin, dependent_var: str
-) -> pd.DataFrame:
+    dataframe: pd.DataFrame, dependent_var: str, scaler: Transformer, should_fit_scaler: bool
+) -> Tuple[pd.DataFrame, Transformer]:
     """
     Create and return a new dataframe using the data from the given dataframe standardized
     using the given scaler. Does not standardize the dependent variable column.
 
     :param dataframe: the dataframe to pull data from
     :type dataframe: pd.DataFrame
-    :param scaler: the scaler to use to standardize the data
-    :type scaler: TransformerMixin
     :param dependent_var: the dependent variable to not standardize
     :type dependent_var: str
+    :param scaler: the scaler to use to standardize the data
+    :type scaler: Transformer
+    :param should_fit_scaler: whether the scaler should be fit before transforming the data
+    :type should_fit_scaler: bool
     :return: a copy of the dataframe, with its data standardized
     :rtype: pd.DataFrame
     """
@@ -331,47 +356,40 @@ def standardize_data(
 
     # Don't standardize the dependent variable, so it can translate across data sets
     to_standardize = dataframe.columns.difference([dependent_var])
-    dataframe[to_standardize] = scaler.fit_transform(dataframe[to_standardize])
 
-    return dataframe
+    if should_fit_scaler:
+        scaler.fit(dataframe[to_standardize])
 
+    dataframe[to_standardize] = scaler.transform(dataframe[to_standardize])
 
-def remove_nan_rows(dataframe: pd.DataFrame) -> pd.DataFrame:
-    """
-    Return a copy of the dataframe with all rows containing NaN removed.
-
-    This is particularly useful when run as the last step of the data cleaning process,
-    after all of the unecessary columns (which may contain NaN values) have been removed.
-
-    :param dataframe: the dataframe to pull data from
-    :type dataframe: pd.DataFrame
-    :return: a copy of the dataframe, with rows containing NaN values removed
-    :rtype: pd.DataFrame
-    """
-    return dataframe.dropna()
+    return dataframe, scaler
 
 
-def get_data(dependent_var: str, scaler: TransformerMixin) -> pd.DataFrame:
+def get_data(dependent_var: str, scaler: Transformer) -> Tuple[pd.DataFrame, Transformer]:
     """
     Get the dataframe of the TOP500 data we are interested in, already cleaned, one-hot
     encoded, and standardized.
 
     :param dependent_var: the dependent varible to use, so that it is include in the dataframe
     :type dependent_var: str
+    :param scaler: the sklearn scaler to use to standardize the data
+    :type scaler: Transformer
     :return: the dataframe with all of the cleaned and encoded data
     :rtype: pd.DataFrame
     """
+    # Read all of the data into one dataframe with all of the expected columns
     all_data = read_data()
     df = _combine_raw_data(all_data, dependent_var)
-    df = remove_nan_rows(df)
+
+    # Remove rows with NaN; important for efficiency which isn't reported all of the time
+    df = df.dropna()
+
     df = filter_duplicates(df)
     df = one_hot_encode(df)
-    df = standardize_data(df, scaler, dependent_var)
-    return df
+    return standardize_data(df, dependent_var, scaler, True)
 
 
 if __name__ == "__main__":
-    # TODO: Check if using Accelerator cores as a fraction improves performance
     # TODO: Check if already_mas.txt can be subsituted for extracting values from
     #       mas_translations.csv
     # TODO: Try log-transforming the number of cores
@@ -379,7 +397,7 @@ if __name__ == "__main__":
     #       boost performance
 
     # Run to see the dataset in results.csv
-    data = get_data("Log(Rmax)", RobustScaler())
+    data, _ = get_data("Log(Rmax)", RobustScaler())
     data.to_csv("results.csv")
 
     # After getting data, do train/test splits and filter for duplicates

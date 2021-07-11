@@ -31,7 +31,9 @@ def split_x_y(
 
 if __name__ == "__main__":
     dep_var = "Log(Rmax)"
-    data = get_data(dep_var, RobustScaler())
+    data, _ = get_data(dep_var, RobustScaler())
+    # dep_var = "Log(Efficiency)"
+    # data = get_data(dep_var, StandardScaler())
 
     non_holdout, holdout = train_test(data, 0.1)
     train, test = train_test(non_holdout, 0.1)
