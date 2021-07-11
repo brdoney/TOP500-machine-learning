@@ -1,12 +1,12 @@
 import re
-from typing import Any, List, Optional, Protocol, Tuple, cast
+from typing import Any, List, Optional, Protocol, Tuple, Union, cast
 
 import numpy as np
 import pandas as pd
-
 from sklearn.preprocessing import RobustScaler
 
-from read_data import read_data, read_mas_translations, read_valid_microarchitectures
+from read_data import (read_datasets, read_mas_translations,
+                       read_valid_microarchitectures)
 
 
 def _columns_in_frame(data: pd.DataFrame, columns: List[str]) -> Optional[str]:
@@ -365,28 +365,26 @@ def standardize_data(
     return dataframe, scaler
 
 
-def get_data(dependent_var: str, scaler: Transformer) -> Tuple[pd.DataFrame, Transformer]:
-    """
-    Get the dataframe of the TOP500 data we are interested in, already cleaned, one-hot
-    encoded, and standardized.
-
-    :param dependent_var: the dependent varible to use, so that it is include in the dataframe
-    :type dependent_var: str
-    :param scaler: the sklearn scaler to use to standardize the data
-    :type scaler: Transformer
-    :return: the dataframe with all of the cleaned and encoded data
-    :rtype: pd.DataFrame
-    """
-    # Read all of the data into one dataframe with all of the expected columns
-    all_data = read_data()
-    df = _combine_raw_data(all_data, dependent_var)
+def preprocess_data(
+    data: Union[pd.DataFrame, List[pd.DataFrame]],
+    dependent_var: str,
+    scaler: Transformer,
+    should_fit_scaler: bool
+) -> Tuple[pd.DataFrame, Transformer]:
+    # If we were given a list of dataframes, combine them into one so that we can apply
+    # the pre-processing steps
+    if type(data) is list:
+        df = _combine_raw_data(data, dependent_var)
+    else:
+        df = cast(pd.DataFrame, data)
 
     # Remove rows with NaN; important for efficiency which isn't reported all of the time
     df = df.dropna()
 
+    # Now apply the rest of the steps
     df = filter_duplicates(df)
     df = one_hot_encode(df)
-    return standardize_data(df, dependent_var, scaler, True)
+    return standardize_data(df, dependent_var, scaler, should_fit_scaler)
 
 
 if __name__ == "__main__":
@@ -397,7 +395,8 @@ if __name__ == "__main__":
     #       boost performance
 
     # Run to see the dataset in results.csv
-    data, _ = get_data("Log(Rmax)", RobustScaler())
+    all_data = read_datasets()
+    data, _ = preprocess_data(all_data, "Log(Rmax)", RobustScaler(), True)
     data.to_csv("results.csv")
 
     # After getting data, do train/test splits and filter for duplicates

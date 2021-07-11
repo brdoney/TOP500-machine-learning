@@ -6,7 +6,7 @@ from typing import Dict, List
 import pandas as pd
 
 
-def read_data() -> List[pd.DataFrame]:
+def read_datasets() -> List[pd.DataFrame]:
     """
     Read all of the excel files (.xlx or .xlsx) in the given folder and turn them into
     dataframes.
