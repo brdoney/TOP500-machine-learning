@@ -191,12 +191,12 @@ def _create_coprocessor_ratio_col(data: pd.DataFrame) -> pd.DataFrame:
 def _individual_df_cleaning(data: pd.DataFrame) -> pd.DataFrame:
     """
     Prep an individual dataframe by making its columns use the units we want and have the
-    right labels, apply log transforms to Rmax and Effeciency, and create the
+    right labels, apply log transforms to Rmax and Efficiency, and create the
     microarchitecture column.
 
     Important other steps in the cleaning process are filtering duplicates and
     standardization/normalization, but they require all of the data to be done
-    succesfully, so they are ommited from this function.
+    successfully, so they are omitted from this function.
 
     :param data: the dataframe to clean
     :type data: pd.DataFrame
@@ -311,7 +311,7 @@ def _combine_raw_data(raw_dataframes: List[pd.DataFrame], dependent_var: str) ->
     :rtype: pd.DataFrame
     """
     # Concatenate all the rows, ignoring the index so we don't try merging rows from each
-    # dataframe at all (essentialy, we're just appending them)
+    # dataframe at all (essentials, we're just appending them)
     processed: List[pd.DataFrame] = []
     for df in raw_dataframes:
         df = _individual_df_cleaning(df)

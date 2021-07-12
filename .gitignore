@@ -15,3 +15,6 @@ results.csv
 
 # OS files
 .DS_Store
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
