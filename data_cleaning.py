@@ -5,8 +5,7 @@ import numpy as np
 import pandas as pd
 from sklearn.preprocessing import RobustScaler
 
-from read_data import (read_datasets, read_mas_translations,
-                       read_valid_microarchitectures)
+from read_data import read_datasets, read_mas_translations, read_valid_microarchitectures
 
 
 def _columns_in_frame(data: pd.DataFrame, columns: List[str]) -> Optional[str]:
@@ -69,14 +68,18 @@ def _make_cols_uniform(data: pd.DataFrame) -> pd.DataFrame:
     # power efficiency column at all (so we'll calculate it); otherwise, we can
     # just rename the column later
     efficiency_cols = [
-        "Mflops/Watt", "Power Effeciency [GFlops/Watts]", "Power Efficiency [GFlops/Watts]"]
+        "Mflops/Watt",
+        "Power Effeciency [GFlops/Watts]",
+        "Power Efficiency [GFlops/Watts]",
+    ]
     efficiency_col_present = _columns_in_frame(data, efficiency_cols) is not None
     if "Power" in data.columns and not efficiency_col_present and perf_col_present:
         perf_col_label = cast(str, perf_col_label)
 
         # Power Efficiency [GFlops/W] = Rmax [TFlops] / Power [W]
-        data["Power Efficiency [GFlops/Watts]"] = (
-            data[perf_col_label] / data["Power"]) * (1/1000)  # type: ignore
+        data["Power Efficiency [GFlops/Watts]"] = (data[perf_col_label] / data["Power"]) * (
+            1 / 1000
+        )  # type: ignore
 
     # Do the rename, now that we have done the unit conversions
     data = data.rename(columns=renaming_mapping)  # type: ignore
@@ -85,7 +88,8 @@ def _make_cols_uniform(data: pd.DataFrame) -> pd.DataFrame:
     # having no accelerator, so we can fill in 0 for all missing values (there are some
     # outliers, but this holds the vast majority of the time)
     data["Accelerator/Co-Processor Cores"] = data["Accelerator/Co-Processor Cores"].fillna(
-        value=0)  # type: ignore
+        value=0
+    )  # type: ignore
 
     return data
 
@@ -102,7 +106,7 @@ def _apply_log_transforms(data: pd.DataFrame) -> pd.DataFrame:
     """
     rename_map = {
         "Rmax [TFlop/s]": "Log(Rmax)",
-        "Power Efficiency [GFlops/Watts]": "Log(Efficiency)"
+        "Power Efficiency [GFlops/Watts]": "Log(Efficiency)",
     }
 
     data = data.copy()
@@ -183,16 +187,19 @@ def _create_coprocessor_ratio_col(data: pd.DataFrame) -> pd.DataFrame:
     :rtype: pd.DataFrame
     """
     data = data.copy()
-    data["Co-Processor Cores to Total Cores"] = \
+    data["Co-Processor Cores to Total Cores"] = (
         data["Accelerator/Co-Processor Cores"] / data["Total Cores"]
+    )
     return data
 
 
-def _individual_df_cleaning(data: pd.DataFrame) -> pd.DataFrame:
+def _individual_df_cleaning(
+    data: pd.DataFrame, dependent_var: str, include_date: bool
+) -> pd.DataFrame:
     """
     Prep an individual dataframe by making its columns use the units we want and have the
-    right labels, apply log transforms to Rmax and Efficiency, and create the
-    microarchitecture column.
+    right labels, apply log transforms to Rmax and Efficiency, create the
+    microarchitecture column, and selet the desired dataframe columns.
 
     Important other steps in the cleaning process are filtering duplicates and
     standardization/normalization, but they require all of the data to be done
@@ -200,6 +207,8 @@ def _individual_df_cleaning(data: pd.DataFrame) -> pd.DataFrame:
 
     :param data: the dataframe to clean
     :type data: pd.DataFrame
+    :param include_date: whether to include the date column in the resulting dataframe
+    :type include_date: bool
     :return: a copy of the dataframe, cleaned
     :rtype: pd.DataFrame
     """
@@ -207,6 +216,7 @@ def _individual_df_cleaning(data: pd.DataFrame) -> pd.DataFrame:
     data = _apply_log_transforms(data)
     data = _create_microarchitecture_col(data)
     data = _create_coprocessor_ratio_col(data)
+    data = _select_desired_cols(data, dependent_var, include_date)
     return data
 
 
@@ -231,7 +241,7 @@ def filter_duplicates(dataframe: pd.DataFrame) -> pd.DataFrame:
     rows_before = len(dataframe)
     # Don't use year because we want to filter systems that are entered multiple years
     # without changes
-    excluding_year = dataframe.columns.difference(["Year"])
+    excluding_year = dataframe.columns.difference(["Year", "Date"])
     dataframe = dataframe.drop_duplicates(subset=excluding_year)
 
     print(f"Filtered duplicates to go from {rows_before} rows to {len(dataframe)}")
@@ -261,7 +271,9 @@ def one_hot_encode(data: pd.DataFrame) -> pd.DataFrame:
     )
 
 
-def _select_desired_cols(data: pd.DataFrame, dependent_var: str) -> pd.DataFrame:
+def _select_desired_cols(
+    data: pd.DataFrame, dependent_var: str, include_date: bool
+) -> pd.DataFrame:
     """
     Select the desired columns from the dataset, including the given dependent variable,
     and move them into a new dataset.
@@ -279,6 +291,8 @@ def _select_desired_cols(data: pd.DataFrame, dependent_var: str) -> pd.DataFrame
     :type data: pd.DataFrame
     :param dependent_var: the dependent variable that we want included in the resulting dataset
     :type dependent_var: str
+    :param include_date: whether to include the date column in the resulting dataframe
+    :type include_date: bool
     :return: a copy of the dataframe, with only the desired columns
     :rtype: pd.DataFrame
     """
@@ -291,34 +305,9 @@ def _select_desired_cols(data: pd.DataFrame, dependent_var: str) -> pd.DataFrame
         "Co-Processor Cores to Total Cores",
         dependent_var,
     ]
+    if include_date:
+        desired_cols.append("Date")
     return data[desired_cols].copy()
-
-
-def _combine_raw_data(raw_dataframes: List[pd.DataFrame], dependent_var: str) -> pd.DataFrame:
-    """
-    Combine the raw dataframes into a single, large dataframe.
-
-    Notably, the dataset will have the cleaned version of only the data we are interested
-    in for the model, since this is necessary to make the combination of the datasets
-    possible.
-
-    :param raw_dataframes: the list of dataframes that we wish to combine into one
-    :type raw_dataframes: List[pd.DataFrame]
-    :param dependent_var: the dependent variable that we are interested in, so that we
-    don't remove its column
-    :type dependent_var: str
-    :return: the dataframe that is made up of the contents of all of the raw dataframes
-    :rtype: pd.DataFrame
-    """
-    # Concatenate all the rows, ignoring the index so we don't try merging rows from each
-    # dataframe at all (essentials, we're just appending them)
-    processed: List[pd.DataFrame] = []
-    for df in raw_dataframes:
-        df = _individual_df_cleaning(df)
-        df = _select_desired_cols(df, dependent_var)
-        processed.append(df)
-
-    return pd.concat(processed, ignore_index=True)
 
 
 class Transformer(Protocol):
@@ -327,10 +316,16 @@ class Transformer(Protocol):
     such as StandardScaler and OneHotEncoder.
     """
 
-    def fit(self: Any, X: Any, y=None) -> Any:
+    def fit(self, X, y=None) -> Any:
         ...
 
-    def transform(self, X: Any) -> Any:
+    def transform(self, X) -> Any:
+        ...
+
+    def fit_transform(self, X, y=None, **fit_params) -> Any:
+        ...
+
+    def inverse_transform(self, X) -> Any:
         ...
 
 
@@ -355,7 +350,7 @@ def standardize_data(
     dataframe = dataframe.copy()
 
     # Don't standardize the dependent variable, so it can translate across data sets
-    to_standardize = dataframe.columns.difference([dependent_var])
+    to_standardize = dataframe.columns.difference([dependent_var, "Date"])
 
     if should_fit_scaler:
         scaler.fit(dataframe[to_standardize])
@@ -369,14 +364,21 @@ def preprocess_data(
     data: Union[pd.DataFrame, List[pd.DataFrame]],
     dependent_var: str,
     scaler: Transformer,
-    should_fit_scaler: bool
+    should_fit_scaler: bool,
+    include_date_col: bool,
 ) -> Tuple[pd.DataFrame, Transformer]:
     # If we were given a list of dataframes, combine them into one so that we can apply
     # the pre-processing steps
     if type(data) is list:
-        df = _combine_raw_data(data, dependent_var)
+        processed = [
+            _individual_df_cleaning(df, dependent_var, include_date_col) for df in data
+        ]
+        # Concatenate all the rows, ignoring the index so we don't try merging rows from each
+        # dataframe at all (essentially, we're just appending them)
+        df = pd.concat(processed, ignore_index=True)
     else:
         df = cast(pd.DataFrame, data)
+        df = _individual_df_cleaning(df, dependent_var, include_date_col)
 
     # Remove rows with NaN; important for efficiency which isn't reported all of the time
     df = df.dropna()
@@ -393,10 +395,11 @@ if __name__ == "__main__":
     # TODO: Try log-transforming the number of cores
     # TODO: Determine whether having efficiency and Rmax with the same units will
     #       boost performance
+    # TODO: Try both options for which duplicate to drop
 
     # Run to see the dataset in results.csv
     all_data = read_datasets()
-    data, _ = preprocess_data(all_data, "Log(Rmax)", RobustScaler(), True)
+    data, _ = preprocess_data(all_data, "Log(Rmax)", RobustScaler(), True, False)
     data.to_csv("results.csv")
 
     # After getting data, do train/test splits and filter for duplicates

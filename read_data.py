@@ -23,15 +23,18 @@ def read_datasets() -> List[pd.DataFrame]:
     top500_dir = pathlib.Path("./TOP500_files/")
 
     # Exclude the ~FILENAME file Excel generates for open files and include xls or xlsx files
-    excel_file = re.compile(r"[^~].+\.xlsx?")
+    # While also extracting the year and month data to support train on past
+    excel_file = re.compile(r"TOP500_(\d+)\.xlsx?")
 
     all_datasets = []
     for file in top500_dir.iterdir():
-        if excel_file.match(file.name) is not None:
+        match = excel_file.match(file.name)
+        if match is not None:
             print(file.name)
             # This is a file we want to process, so read it to dataframe
             # `read_excel` supports PathLike objects, so ignore typing error
-            curr_data = pd.read_excel(file, header=0)  # type: ignore
+            curr_data: pd.DataFrame = pd.read_excel(file, header=0)  # type: ignore
+            curr_data = curr_data.assign(Date=match.group(1))
             all_datasets.append(curr_data)
 
     return all_datasets
