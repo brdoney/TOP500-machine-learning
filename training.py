@@ -44,4 +44,10 @@ def select_past(
         selected_dates.append(date_str)
 
     selected = dataframe[dataframe["Date"].isin(selected_dates)].copy()
-    return selected.drop(columns="Date")
+
+    # Sorts in ascending order (earlier date first), dropping date since it won't be used
+    # in training
+    sorted_df = selected.sort_values(by="Date")
+    sorted_df = sorted_df.drop(columns="Date")
+
+    return sorted_df

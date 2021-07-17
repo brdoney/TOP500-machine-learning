@@ -241,8 +241,8 @@ def filter_duplicates(dataframe: pd.DataFrame) -> pd.DataFrame:
     rows_before = len(dataframe)
     # Don't use year because we want to filter systems that are entered multiple years
     # without changes
-    excluding_year = dataframe.columns.difference(["Year", "Date"])
-    dataframe = dataframe.drop_duplicates(subset=excluding_year)
+    excluding_cols = dataframe.columns.difference(["Year", "Date"])
+    dataframe = dataframe.drop_duplicates(subset=excluding_cols)
 
     print(f"Filtered duplicates to go from {rows_before} rows to {len(dataframe)}")
     return dataframe
@@ -392,14 +392,13 @@ def preprocess_data(
 if __name__ == "__main__":
     # TODO: Check if already_mas.txt can be subsituted for extracting values from
     #       mas_translations.csv
-    # TODO: Try log-transforming the number of cores
     # TODO: Determine whether having efficiency and Rmax with the same units will
     #       boost performance
     # TODO: Try both options for which duplicate to drop
 
     # Run to see the dataset in results.csv
     all_data = read_datasets()
-    data, _ = preprocess_data(all_data, "Log(Rmax)", RobustScaler(), True, False)
+    data, _ = preprocess_data(all_data, "Log(Rmax)", RobustScaler(), True, True)
     data.to_csv("results.csv")
 
     # After getting data, do train/test splits and filter for duplicates
