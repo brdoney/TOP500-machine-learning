@@ -1,14 +1,40 @@
-from typing import List, Literal, Tuple, cast
+from typing import List, Tuple, Union, cast
+import numpy as np
 
 import pandas as pd
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import (
+    mean_absolute_error,
+    mean_squared_error,
+    r2_score,
+    mean_absolute_percentage_error,
+)
 
 
-def train_test(dataframe: pd.DataFrame, test_size: float) -> Tuple[pd.DataFrame, pd.DataFrame]:
+def train_test_random(
+    dataframe: pd.DataFrame, test_size: float
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
     # Splitting also scrambles the values by default
-    train, test = train_test_split(dataframe, test_size=test_size)
-    train = cast(pd.DataFrame, train)
-    test = cast(pd.DataFrame, test)
+    train_test_list = train_test_split(dataframe, test_size=test_size)
+    train_test_list = cast(List[pd.DataFrame], train_test_list)
+
+    # Remove the Date column if it still exists, since it won't be used in training
+    train_test_list = [df.drop(columns="Date", errors="ignore") for df in train_test_list]
+
+    # There should only be two elements, but just in case
+    train, test = train_test_list
+    return train, test
+
+
+def train_test_year(dataframe: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    max_date = dataframe["Date"].max()
+
+    # Use the current year as the testing data, everything else is training
+    # Also remove the Date column, since it won't be used in training
+    is_most_recent = dataframe["Date"] == max_date
+    test = dataframe[is_most_recent].drop(columns="Date")
+    train = dataframe[~is_most_recent].drop(columns="Date")
+
     return train, test
 
 
@@ -23,31 +49,14 @@ def split_x_y(
     return splits
 
 
-def select_past(
-    dataframe: pd.DataFrame,
-    current_year: int,
-    current_month: Literal[6, 11],
-    select_num_datasets: int,
-) -> pd.DataFrame:
-    valid_months = ["06", "11"]
-
-    selected_dates: List[str] = []
-
-    month_index = valid_months.index(f"{current_month:02}")
-    year = current_year
-    for _ in range(select_num_datasets):
-        if month_index == 0:
-            year -= 1
-        month_index = (month_index - 1) % len(valid_months)
-
-        date_str = f"{year}{valid_months[month_index]}"
-        selected_dates.append(date_str)
-
-    selected = dataframe[dataframe["Date"].isin(selected_dates)].copy()
-
-    # Sorts in ascending order (earlier date first), dropping date since it won't be used
-    # in training
-    sorted_df = selected.sort_values(by="Date")
-    sorted_df = sorted_df.drop(columns="Date")
-
-    return sorted_df
+def print_stats(
+    exp_y: Union[pd.Series, np.ndarray], pred_y: Union[pd.Series, np.ndarray], prefix: str
+):
+    r2 = r2_score(exp_y, pred_y)
+    mae = mean_absolute_error(exp_y, pred_y)
+    mape = mean_absolute_percentage_error(exp_y, pred_y)
+    mse = mean_squared_error(exp_y, pred_y)
+    print(f"{prefix} R^2: {r2}")
+    print(f"{prefix} MAE: {mae}")
+    print(f"{prefix} MAPE: {mape}")
+    print(f"{prefix} MSE: {mse}")

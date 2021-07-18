@@ -193,9 +193,7 @@ def _create_coprocessor_ratio_col(data: pd.DataFrame) -> pd.DataFrame:
     return data
 
 
-def _individual_df_cleaning(
-    data: pd.DataFrame, dependent_var: str, include_date: bool
-) -> pd.DataFrame:
+def _individual_df_cleaning(data: pd.DataFrame, dependent_var: str) -> pd.DataFrame:
     """
     Prep an individual dataframe by making its columns use the units we want and have the
     right labels, apply log transforms to Rmax and Efficiency, create the
@@ -207,8 +205,8 @@ def _individual_df_cleaning(
 
     :param data: the dataframe to clean
     :type data: pd.DataFrame
-    :param include_date: whether to include the date column in the resulting dataframe
-    :type include_date: bool
+    :param dependent_var: the dependent var that we are interested in
+    :type dependent_var: str
     :return: a copy of the dataframe, cleaned
     :rtype: pd.DataFrame
     """
@@ -216,7 +214,7 @@ def _individual_df_cleaning(
     data = _apply_log_transforms(data)
     data = _create_microarchitecture_col(data)
     data = _create_coprocessor_ratio_col(data)
-    data = _select_desired_cols(data, dependent_var, include_date)
+    data = _select_desired_cols(data, dependent_var)
     return data
 
 
@@ -271,9 +269,7 @@ def one_hot_encode(data: pd.DataFrame) -> pd.DataFrame:
     )
 
 
-def _select_desired_cols(
-    data: pd.DataFrame, dependent_var: str, include_date: bool
-) -> pd.DataFrame:
+def _select_desired_cols(data: pd.DataFrame, dependent_var: str) -> pd.DataFrame:
     """
     Select the desired columns from the dataset, including the given dependent variable,
     and move them into a new dataset.
@@ -285,14 +281,13 @@ def _select_desired_cols(
     * Processor Speed (MHz)
     * Total Cores
     * Accelerator/Co-Processor Cores
+    * Date (formatted like `f"{year}{month:02}"`)
     * The specified dependent variable column
 
     :param data: the dataframe to pull data from
     :type data: pd.DataFrame
     :param dependent_var: the dependent variable that we want included in the resulting dataset
     :type dependent_var: str
-    :param include_date: whether to include the date column in the resulting dataframe
-    :type include_date: bool
     :return: a copy of the dataframe, with only the desired columns
     :rtype: pd.DataFrame
     """
@@ -303,10 +298,9 @@ def _select_desired_cols(
         "Processor Speed (MHz)",
         "Total Cores",
         "Co-Processor Cores to Total Cores",
+        "Date",
         dependent_var,
     ]
-    if include_date:
-        desired_cols.append("Date")
     return data[desired_cols].copy()
 
 
@@ -360,29 +354,82 @@ def standardize_data(
     return dataframe, scaler
 
 
-def preprocess_data(
-    data: Union[pd.DataFrame, List[pd.DataFrame]],
-    dependent_var: str,
-    scaler: Transformer,
-    should_fit_scaler: bool,
-    include_date_col: bool,
-) -> Tuple[pd.DataFrame, Transformer]:
+def select_past(
+    data: pd.DataFrame, select_num_datasets: int, end_at_date: Optional[str] = None
+) -> pd.DataFrame:
+    """
+    Select the given number of datasets, working backwards in date order starting from
+    end_at_date.
+
+    If `end_at_date` is not provided or is None, we find and use the date for the latest
+    dataset.
+
+    NOTE: The given dataframe must have the "Date" column for this method to work.
+
+    :param data: the dataset that includes the rows we are selecting based on date
+    :type data: pd.DataFrame
+    :param select_num_datasets: the number of datasets to include, including the data on
+    `end_at_date`
+    :type select_num_datasets: int
+    :param end_at_date: the date to start working backwards from, defaults to None
+    :type end_at_date: Optional[str], optional
+    :return: the data from datasets in the indicated range
+    :rtype: pd.DataFrame
+    """
+    valid_months = ["06", "11"]
+
+    # Use the maximum value if not end date is provided
+    if end_at_date is None:
+        end_at_date = cast(str, data["Date"].max())
+
+    selected_dates: List[str] = [end_at_date]
+
+    month_index = valid_months.index(end_at_date[4:])
+    year = int(end_at_date[:4])
+
+    for _ in range(select_num_datasets-1):
+        if month_index == 0:
+            year -= 1
+        month_index = (month_index - 1) % len(valid_months)
+
+        date_str = f"{year}{valid_months[month_index]}"
+        selected_dates.append(date_str)
+
+    selected = data[data["Date"].isin(selected_dates)].copy()
+
+    # Sorts in ascending order (earlier date first)
+    sorted_df = selected.sort_values(by="Date")
+
+    return sorted_df
+
+
+def prep_dataframe(
+    data: Union[pd.DataFrame, List[pd.DataFrame]], dependent_var: str
+) -> pd.DataFrame:
     # If we were given a list of dataframes, combine them into one so that we can apply
     # the pre-processing steps
     if type(data) is list:
         processed = [
-            _individual_df_cleaning(df, dependent_var, include_date_col) for df in data
+            _individual_df_cleaning(df, dependent_var) for df in data
         ]
         # Concatenate all the rows, ignoring the index so we don't try merging rows from each
         # dataframe at all (essentially, we're just appending them)
         df = pd.concat(processed, ignore_index=True)
     else:
         df = cast(pd.DataFrame, data)
-        df = _individual_df_cleaning(df, dependent_var, include_date_col)
+        df = _individual_df_cleaning(df, dependent_var)
 
+    return df
+
+
+def preprocess_data(
+    data: pd.DataFrame,
+    dependent_var: str,
+    scaler: Transformer,
+    should_fit_scaler: bool,
+) -> Tuple[pd.DataFrame, Transformer]:
     # Remove rows with NaN; important for efficiency which isn't reported all of the time
-    df = df.dropna()
-
+    df = data.dropna()
     # Now apply the rest of the steps
     df = filter_duplicates(df)
     df = one_hot_encode(df)
@@ -397,8 +444,11 @@ if __name__ == "__main__":
     # TODO: Try both options for which duplicate to drop
 
     # Run to see the dataset in results.csv
+    dependent_var = "Log(Rmax)"
     all_data = read_datasets()
-    data, _ = preprocess_data(all_data, "Log(Rmax)", RobustScaler(), True, True)
+    data = prep_dataframe(all_data, dependent_var)
+    data = select_past(data, 3)
+    data, _ = preprocess_data(data, dependent_var, RobustScaler(), True)
     data.to_csv("results.csv")
 
     # After getting data, do train/test splits and filter for duplicates
