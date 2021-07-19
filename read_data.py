@@ -49,10 +49,10 @@ def read_mas_translations() -> Dict[re.Pattern, str]:
     :rtype: Dict[re.Pattern, str]
     """
     lines = pathlib.Path(
-        "./microarchitectures/mas_translations.csv").read_text().splitlines()
+        "./microarchitectures/mas_translations.tsv").read_text().splitlines()
 
     # Filter out all comments
-    reader = csv.DictReader(filter(lambda row: row[0] != '#', lines))
+    reader = csv.DictReader(filter(lambda row: row[0] != '#', lines), delimiter="\t")
 
     # Create dict where {regex: desired name}
     non_mas_to_mas = {}
