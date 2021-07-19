@@ -1,5 +1,6 @@
 AMD Zen (Naples)
 AMD Zen-2 (Rome)
+AMD Zen-3 (Milan)
 Bulldozer
 CBEA
 IBM A2
@@ -7,6 +8,7 @@ Intel Broadwell
 Intel Cascade lake
 Intel Core
 Intel Haswell
+Intel Ice Lake
 Intel IvyBridge
 Intel Nehalem
 Intel SandyBridge
@@ -38,6 +40,7 @@ SW-1
 SW-2
 SW-3
 SW26010
+SX-Aurora
 Unknown
 Vulcan
 Zen
