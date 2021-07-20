@@ -10,6 +10,9 @@ from sklearn.metrics import (
     mean_absolute_percentage_error,
 )
 
+from data_cleaning import prep_dataframe, preprocess_data, Transformer, select_past
+from read_data import read_datasets
+
 
 def train_test_random(
     dataframe: pd.DataFrame, test_size: float
@@ -30,10 +33,12 @@ def train_test_year(dataframe: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame
     max_date = dataframe["Date"].max()
 
     # Use the current year as the testing data, everything else is training
+    is_most_recent = cast(pd.Series[bool], dataframe["Date"] == max_date)
+    not_is_most_recent: pd.Series[bool] = ~is_most_recent
+
     # Also remove the Date column, since it won't be used in training
-    is_most_recent = dataframe["Date"] == max_date
     test = dataframe[is_most_recent].drop(columns="Date")
-    train = dataframe[~is_most_recent].drop(columns="Date")
+    train = dataframe[not_is_most_recent].drop(columns="Date")
 
     return train, test
 
@@ -47,6 +52,30 @@ def split_x_y(
         X = df.drop(columns=dependent_var)
         splits.append((X, y))
     return splits
+
+
+def toa_data(dep_var: str, scaler: Transformer) -> List[Tuple[pd.DataFrame, pd.Series]]:
+    all_data = read_datasets()
+
+    data = prep_dataframe(all_data, dep_var)
+    data, _ = preprocess_data(data, dep_var, scaler, True)
+    non_holdout, holdout = train_test_random(data, 0.1)
+    train, test = train_test_random(non_holdout, 0.1)
+
+    # Do splits for all data
+    return split_x_y([train, test, holdout], dep_var)
+
+
+def top_data(dep_var: str, scaler: Transformer) -> List[Tuple[pd.DataFrame, pd.Series]]:
+    all_data = read_datasets()
+
+    data = prep_dataframe(all_data, dep_var)
+    data = select_past(data, 3)
+    data, _ = preprocess_data(data, dep_var, scaler, True)
+    train, test = train_test_year(data)
+
+    # Do splits for all data
+    return split_x_y([train, test], dep_var)
 
 
 def print_stats(

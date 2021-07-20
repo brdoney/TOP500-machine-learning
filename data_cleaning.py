@@ -62,7 +62,7 @@ def _make_cols_uniform(data: pd.DataFrame) -> pd.DataFrame:
     perf_col_label = _columns_in_frame(data, ["Rmax", "RMax"])
     perf_col_present = perf_col_label is not None
     if perf_col_present:
-        data[perf_col_label] /= 1000
+        data[perf_col_label] /= 1000  # type: ignore
 
     # We want Power Efficiency in GFlops/W, but older data might not have a
     # power efficiency column at all (so we'll calculate it); otherwise, we can
@@ -441,7 +441,6 @@ if __name__ == "__main__":
     #       mas_translations.csv
     # TODO: Determine whether having efficiency and Rmax with the same units will
     #       boost performance
-    # TODO: Try both options for which duplicate to drop
 
     # Run to see the dataset in results.csv
     dependent_var = "Log(Rmax)"
