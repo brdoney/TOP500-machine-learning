@@ -261,10 +261,9 @@ def one_hot_encode(data: pd.DataFrame) -> pd.DataFrame:
     """
     categorical_prefixes = {"Architecture": "a", "Microarchitecture": "ma"}
     return pd.get_dummies(
-        data,
+        data.copy(),
         columns=categorical_prefixes.keys(),
         prefix=categorical_prefixes.values(),
-        prefix_sep=":",
         drop_first=True,
     )
 

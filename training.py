@@ -78,14 +78,21 @@ def top_data(dep_var: str, scaler: Transformer) -> List[Tuple[pd.DataFrame, pd.S
     return split_x_y([train, test], dep_var)
 
 
-def print_stats(
-    exp_y: Union[pd.Series, np.ndarray], pred_y: Union[pd.Series, np.ndarray], prefix: str
-):
-    r2 = r2_score(exp_y, pred_y)
-    mae = mean_absolute_error(exp_y, pred_y)
-    mape = mean_absolute_percentage_error(exp_y, pred_y)
-    mse = mean_squared_error(exp_y, pred_y)
-    print(f"{prefix} R^2: {r2}")
-    print(f"{prefix} MAE: {mae}")
-    print(f"{prefix} MAPE: {mape}")
-    print(f"{prefix} MSE: {mse}")
+def calc_stats(
+    exp_y: Union[pd.Series, np.ndarray],
+    pred_y: Union[pd.Series, np.ndarray],
+    print_res: bool = True,
+    prefix: str = ""
+) -> dict[str, float]:
+    results = {
+        "r2": r2_score(exp_y, pred_y),
+        "mae": mean_absolute_error(exp_y, pred_y),
+        "mape": mean_absolute_percentage_error(exp_y, pred_y),
+        "mse": mean_squared_error(exp_y, pred_y)
+    }
+
+    if print_res:
+        for name, result in results.items():
+            print(f"{prefix} {name}: {result}")
+
+    return results
