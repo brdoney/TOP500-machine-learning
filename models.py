@@ -94,6 +94,7 @@ models = {
 
     "rf_1": RandomForestRegressor(n_estimators=100, max_depth=None),
     "rf_2": RandomForestRegressor(n_estimators=1000, max_depth=None),
+    "rf_3": RandomForestRegressor(n_estimators=100, max_depth=5),
 
     "gbt_1": GradientBoostingRegressor(learning_rate=0.1, n_estimators=100, max_depth=1),
     "gbt_2": GradientBoostingRegressor(learning_rate=0.1, n_estimators=100, max_depth=2),
