@@ -1,16 +1,13 @@
-from typing import List, Tuple, Union, cast
+from typing import Dict, List, Tuple, Union, cast
+
 import numpy as np
-
 import pandas as pd
+from sklearn.metrics import (mean_absolute_error,
+                             mean_absolute_percentage_error,
+                             mean_squared_error, r2_score)
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import (
-    mean_absolute_error,
-    mean_squared_error,
-    r2_score,
-    mean_absolute_percentage_error,
-)
 
-from data_cleaning import prep_dataframe, Transformer, select_past
+from data_cleaning import Transformer, prep_dataframe, select_past
 from read_data import read_datasets
 
 
@@ -83,7 +80,7 @@ def calc_stats(
     pred_y: Union[pd.Series, np.ndarray],
     print_res: bool = True,
     prefix: str = ""
-) -> dict[str, float]:
+) -> Dict[str, float]:
     results = {
         "r2": r2_score(exp_y, pred_y),
         "mae": mean_absolute_error(exp_y, pred_y),
