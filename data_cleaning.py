@@ -1,11 +1,15 @@
 import re
-from typing import Any, List, Optional, Protocol, Tuple, Union, cast
+import pickle
+from typing import Any, List, Optional, Protocol, Union, cast
 
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import RobustScaler
+from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.preprocessing import OneHotEncoder
 
-from read_data import read_datasets, read_mas_translations, read_valid_microarchitectures
+from read_data import (read_datasets, read_mas_translations,
+                       read_valid_microarchitectures)
 
 
 def _columns_in_frame(data: pd.DataFrame, columns: List[str]) -> Optional[str]:
@@ -246,28 +250,6 @@ def filter_duplicates(dataframe: pd.DataFrame) -> pd.DataFrame:
     return dataframe
 
 
-def one_hot_encode(data: pd.DataFrame) -> pd.DataFrame:
-    """
-    Return a copy of the dataset with the Architecture and Microarchitecture columns
-    one-hot encoded.
-
-    If using this function on multiple datasets, the order of the columns and the dropped
-    dummy variable are not guaranteed to be the same.
-
-    :param data: the dataframe to pull data from
-    :type data: pd.DataFrame
-    :return: a copy of the dataframe, with the categorical columns encoded
-    :rtype: pd.DataFrame
-    """
-    categorical_prefixes = {"Architecture": "a", "Microarchitecture": "ma"}
-    return pd.get_dummies(
-        data.copy(),
-        columns=categorical_prefixes.keys(),
-        prefix=categorical_prefixes.values(),
-        drop_first=True,
-    )
-
-
 def _select_desired_cols(data: pd.DataFrame, dependent_var: str) -> pd.DataFrame:
     """
     Select the desired columns from the dataset, including the given dependent variable,
@@ -318,16 +300,16 @@ class Transformer(Protocol):
     def fit_transform(self, X, y=None, **fit_params) -> Any:
         ...
 
-    def inverse_transform(self, X) -> Any:
-        ...
-
 
 def standardize_data(
     dataframe: pd.DataFrame, dependent_var: str, scaler: Transformer, should_fit_scaler: bool
-) -> Tuple[pd.DataFrame, Transformer]:
+) -> pd.DataFrame:
     """
     Create and return a new dataframe using the data from the given dataframe standardized
     using the given scaler. Does not standardize the dependent variable column.
+
+    NOTE: If `should_fit_scaler` is true, this method will fit the scaler, which modifies
+    the scaler directly, so beware of any side effects this may cause
 
     :param dataframe: the dataframe to pull data from
     :type dataframe: pd.DataFrame
@@ -350,7 +332,7 @@ def standardize_data(
 
     dataframe[to_standardize] = scaler.transform(dataframe[to_standardize])
 
-    return dataframe, scaler
+    return dataframe
 
 
 def select_past(
@@ -421,18 +403,44 @@ def prep_dataframe(
     return df
 
 
-def preprocess_data(
-    data: pd.DataFrame,
-    dependent_var: str,
-    scaler: Transformer,
-    should_fit_scaler: bool,
-) -> Tuple[pd.DataFrame, Transformer]:
-    # Remove rows with NaN; important for efficiency which isn't reported all of the time
-    df = data.dropna()
-    # Now apply the rest of the steps
-    df = filter_duplicates(df)
-    df = one_hot_encode(df)
-    return standardize_data(df, dependent_var, scaler, should_fit_scaler)
+class DataCleaner(TransformerMixin, BaseEstimator):
+    _categorical_cols = {
+        "Architecture": ["Cluster", "MPP", "Constellations"],
+        "Microarchitecture": read_valid_microarchitectures()
+    }
+
+    def __init__(self, scaler: Transformer, dependent_var: str) -> None:
+        self.scaler = scaler
+        self.scaler_is_fit = False
+        self.dependent_var = dependent_var
+
+        # We provide *all* possible values for categorical columns manually now, so we
+        # don't have to fit later
+        categories = list(DataCleaner._categorical_cols.values())
+        self.one_hot_encoder = OneHotEncoder(categories=categories, drop="first")
+
+    def fit(self, X, y=None) -> "DataCleaner":
+        # Fitting shouldn't do anything, since we've already provided data
+        self.one_hot_encoder.fit(X[list(DataCleaner._categorical_cols.keys())])
+        return self
+
+    def transform(self, X: pd.DataFrame) -> pd.DataFrame:
+        # Remove rows with NaNs or that are duplicates of other rows
+        X = X.dropna()
+        X = filter_duplicates(X)
+
+        # One hot encode
+        categories = list(DataCleaner._categorical_cols.keys())
+        encoded = self.one_hot_encoder.transform(X[categories]).toarray()
+        encoded_col_names = self.one_hot_encoder.get_feature_names()
+        encoded_df = pd.DataFrame(encoded, columns=encoded_col_names, index=X.index)
+        X = pd.concat([X, encoded_df], axis="columns").drop(columns=categories)
+
+        # Standardise the data, making sure we only fit the scaler the first time
+        X = standardize_data(X, self.dependent_var, self.scaler, not self.scaler_is_fit)
+        self.scaler_is_fit = True
+
+        return X
 
 
 if __name__ == "__main__":
@@ -443,10 +451,18 @@ if __name__ == "__main__":
 
     # Run to see the dataset in results.csv
     dependent_var = "Log(Rmax)"
+    cleaner = DataCleaner(RobustScaler(), dependent_var)
+
     all_data = read_datasets()
     data = prep_dataframe(all_data, dependent_var)
     data = select_past(data, 3)
-    data, _ = preprocess_data(data, dependent_var, RobustScaler(), True)
+    data = cleaner.fit_transform(data)
     data.to_csv("results.csv")
 
-    # After getting data, do train/test splits and filter for duplicates
+    # print(cleaner.get_params())
+    # testing = pickle.dumps(cleaner)
+    # print(testing)
+    # clf = pickle.loads(testing)
+    # print(clf)
+
+    # pickle.dump(cleaner, open("preprocessor.pkl", "wb"))
