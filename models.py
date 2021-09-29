@@ -111,6 +111,8 @@ models = {
     "lgbm_1": LGBMRegressor(),
 }
 
+model_classes = {k: type(v) for k, v in models.items()}
+
 scalers: Dict[str, Transformer] = {
     "Robust": RobustScaler(),
     "Standard": StandardScaler(),

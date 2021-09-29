@@ -1,5 +1,4 @@
 import re
-import pickle
 from typing import Any, List, Optional, Protocol, Union, cast
 
 import numpy as np
@@ -449,7 +448,7 @@ if __name__ == "__main__":
     # TODO: Determine whether having efficiency and Rmax with the same units will
     #       boost performance
 
-    # Run to see the dataset in results.csv
+    # Run to see the dataset in out/sample.csv
     dependent_var = "Log(Rmax)"
     cleaner = DataCleaner(RobustScaler(), dependent_var)
 
@@ -457,7 +456,7 @@ if __name__ == "__main__":
     data = prep_dataframe(all_data, dependent_var)
     data = select_past(data, 3)
     data = cleaner.fit_transform(data)
-    data.to_csv("results.csv")
+    data.to_csv("out/sample_data.csv")
 
     # print(cleaner.get_params())
     # testing = pickle.dumps(cleaner)
