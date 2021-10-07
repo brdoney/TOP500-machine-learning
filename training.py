@@ -63,6 +63,17 @@ def toa_data(dep_var: str, preprocessor: Transformer) -> List[Tuple[pd.DataFrame
     return split_x_y([train, test, holdout], dep_var)
 
 
+def toa_data_nohold(dep_var: str, preprocessor: Transformer) -> List[Tuple[pd.DataFrame, pd.Series]]:
+    all_data = read_datasets()
+
+    data = prep_dataframe(all_data, dep_var)
+    data = preprocessor.fit_transform(data)
+    train, test = train_test_random(data, 0.1)
+
+    # Do splits for all data
+    return split_x_y([train, test], dep_var)
+
+
 def top_data(dep_var: str, preprocessor: Transformer) -> List[Tuple[pd.DataFrame, pd.Series]]:
     all_data = read_datasets()
 
