@@ -15,11 +15,8 @@ def train_test_random(
     dataframe: pd.DataFrame, test_size: float
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     # Splitting also scrambles the values by default
-    train_test_list = train_test_split(dataframe, test_size=test_size)
+    train_test_list = train_test_split(dataframe, test_size=test_size, random_state=10)
     train_test_list = cast(List[pd.DataFrame], train_test_list)
-
-    # Remove the Date column if it still exists, since it won't be used in training
-    train_test_list = [df.drop(columns="Date", errors="ignore") for df in train_test_list]
 
     # There should only be two elements, but just in case
     train, test = train_test_list
@@ -41,9 +38,13 @@ def train_test_year(dataframe: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame
 
 
 def split_x_y(
-    dataframes: List[pd.DataFrame], dependent_var: str
+    dataframes: Union[List[pd.DataFrame], pd.DataFrame], dependent_var: str
 ) -> List[Tuple[pd.DataFrame, pd.Series]]:
     splits = []
+
+    if isinstance(dataframes, pd.DataFrame):
+        dataframes = [dataframes]
+
     for df in dataframes:
         y = df[dependent_var]
         X = df.drop(columns=dependent_var)
@@ -51,11 +52,20 @@ def split_x_y(
     return splits
 
 
-def toa_data(dep_var: str, preprocessor: Transformer) -> List[Tuple[pd.DataFrame, pd.Series]]:
+def _toa_all_data(dep_var: str, preprocessor: Transformer) -> pd.DataFrame:
+    # Get the processed data
     all_data = read_datasets()
-
     data = prep_dataframe(all_data, dep_var)
     data = preprocessor.fit_transform(data)
+
+    # Remove the Date column, since it won't be used in training
+    data = data.drop(columns="Date", errors="ignore")
+
+    return data
+
+
+def toa_data(dep_var: str, preprocessor: Transformer) -> List[Tuple[pd.DataFrame, pd.Series]]:
+    data = _toa_all_data(dep_var, preprocessor)
     non_holdout, holdout = train_test_random(data, 0.1)
     train, test = train_test_random(non_holdout, 0.1)
 
@@ -64,10 +74,7 @@ def toa_data(dep_var: str, preprocessor: Transformer) -> List[Tuple[pd.DataFrame
 
 
 def toa_data_nohold(dep_var: str, preprocessor: Transformer) -> List[Tuple[pd.DataFrame, pd.Series]]:
-    all_data = read_datasets()
-
-    data = prep_dataframe(all_data, dep_var)
-    data = preprocessor.fit_transform(data)
+    data = _toa_all_data(dep_var, preprocessor)
     train, test = train_test_random(data, 0.1)
 
     # Do splits for all data

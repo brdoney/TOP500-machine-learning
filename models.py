@@ -1,7 +1,7 @@
 from typing import Dict
 
 import tensorflow.keras as keras
-from keras import layers
+from tensorflow.keras import layers
 from lightgbm import LGBMRegressor
 from sklearn.base import BaseEstimator
 from sklearn.ensemble import GradientBoostingRegressor, RandomForestRegressor
@@ -80,6 +80,7 @@ class DNN2(BaseEstimator):
         return pred_y
 
 
+# TODO: Find source that justifies which models are chosen
 models = {
     "lr_1": LinearRegression(),
 
@@ -108,6 +109,7 @@ models = {
     "dnn2_1": DNN2(),
 
     "xgb_1": XGBRegressor(),
+
     "lgbm_1": LGBMRegressor(),
 }
 
