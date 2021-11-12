@@ -24,7 +24,7 @@ class DNN1(BaseEstimator):
     Uses the Keras library, but is designed to use Scikit-Learn style methods.
     """
 
-    def __init__(self):
+    def reset(self):
         self.dnn = keras.Sequential(
             [
                 layers.Dense(100, activation='tanh', name='first'),  # first hidden layer
@@ -37,6 +37,9 @@ class DNN1(BaseEstimator):
         self.dnn.compile(optimizer=optimizer, loss=keras.losses.mean_absolute_error)
 
     def fit(self, x, y):
+        # We need to make sure we're working from scratch each time fit is called
+        self.reset()
+
         self.dnn.fit(x, y, epochs=300, verbose=0)
         return self
 
@@ -54,7 +57,7 @@ class DNN2(BaseEstimator):
     Uses the Keras library, but is designed to use Scikit-Learn style methods.
     """
 
-    def __init__(self):
+    def reset(self):
         nodes_per_layer = 512
         act = 'relu'
         drop_rate = 0.2
@@ -72,6 +75,9 @@ class DNN2(BaseEstimator):
         self.dnn.compile(optimizer="adam", loss=keras.losses.mean_squared_error)
 
     def fit(self, x, y):
+        # We need to make sure we're working from scratch each time fit is called
+        self.reset()
+
         self.dnn.fit(x, y, epochs=100, verbose=0, batch_size=512)
         return self
 

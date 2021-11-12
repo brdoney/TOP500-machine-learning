@@ -81,11 +81,11 @@ def toa_data_nohold(dep_var: str, preprocessor: Transformer) -> List[Tuple[pd.Da
     return split_x_y([train, test], dep_var)
 
 
-def top_data(dep_var: str, preprocessor: Transformer) -> List[Tuple[pd.DataFrame, pd.Series]]:
+def top_data(dep_var: str, preprocessor: Transformer, past_sets: int) -> List[Tuple[pd.DataFrame, pd.Series]]:
     all_data = read_datasets()
 
     data = prep_dataframe(all_data, dep_var)
-    data = select_past(data, 3)
+    data = select_past(data, past_sets)
     data = preprocessor.fit_transform(data)
     train, test = train_test_year(data)
 

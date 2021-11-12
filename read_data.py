@@ -30,7 +30,6 @@ def read_datasets() -> List[pd.DataFrame]:
     for file in top500_dir.iterdir():
         match = excel_file.match(file.name)
         if match is not None:
-            print(file.name)
             # This is a file we want to process, so read it to dataframe
             # `read_excel` supports PathLike objects, so ignore typing error
             curr_data: pd.DataFrame = pd.read_excel(file, header=0)  # type: ignore
