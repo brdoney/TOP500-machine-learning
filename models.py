@@ -90,18 +90,21 @@ class DNN2(BaseEstimator):
 models = {
     "lr_1": LinearRegression(),
 
-    "knn_1": KNeighborsRegressor(n_neighbors=3, p=2),
-    "knn_2": KNeighborsRegressor(n_neighbors=5, p=2),
-    "knn_3": KNeighborsRegressor(n_neighbors=7, p=2),
-    "knn_4": KNeighborsRegressor(n_neighbors=5, p=1),
-    "knn_5": KNeighborsRegressor(n_neighbors=5, p=3),
+    "knn_1": KNeighborsRegressor(n_neighbors=3, weights="distance", p=2),
+    "knn_2": KNeighborsRegressor(n_neighbors=5, weights="distance", p=2),
+    "knn_3": KNeighborsRegressor(n_neighbors=7, weights="distance", p=2),
+    "knn_4": KNeighborsRegressor(n_neighbors=5, weights="distance", p=1),
+    "knn_5": KNeighborsRegressor(n_neighbors=5, weights="distance", p=3),
+    "knn_tuned": KNeighborsRegressor(n_neighbors=5, weights="distance", p=1),
 
     "svr_1": SVR(kernel="rbf"),
     "svr_2": SVR(kernel="poly"),
+    "svr_tuned": SVR(kernel="rbf", epsilon=0.2, gamma=0.021544346900318846, cache_size=1000),
 
     "rf_1": RandomForestRegressor(n_estimators=100, max_depth=None),
     "rf_2": RandomForestRegressor(n_estimators=1000, max_depth=None),
     "rf_3": RandomForestRegressor(n_estimators=100, max_depth=5),
+    "rf_tuned": RandomForestRegressor(n_estimators=5000, max_depth=None, max_features="auto"),
 
     "gbt_1": GradientBoostingRegressor(learning_rate=0.1, n_estimators=100, max_depth=1),
     "gbt_2": GradientBoostingRegressor(learning_rate=0.1, n_estimators=100, max_depth=2),
