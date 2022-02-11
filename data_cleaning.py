@@ -299,6 +299,9 @@ class Transformer(Protocol):
     def fit_transform(self, X, y=None, **fit_params) -> Any:
         ...
 
+    def inverse_transform(self, X) -> Any:
+        ...
+
 
 def standardize_data(
     dataframe: pd.DataFrame, dependent_var: str, scaler: Transformer, should_fit_scaler: bool
@@ -331,6 +334,15 @@ def standardize_data(
 
     dataframe[to_standardize] = scaler.transform(dataframe[to_standardize])
 
+    return dataframe
+
+
+def unstandardize_data(
+    dataframe: pd.DataFrame, dependent_var: str, scaler: Transformer
+) -> pd.DataFrame:
+    dataframe = dataframe.copy()
+    to_unstandardize = dataframe.columns.difference([dependent_var, "Date"])
+    dataframe[to_unstandardize] = scaler.inverse_transform(dataframe[to_unstandardize])
     return dataframe
 
 
@@ -439,6 +451,10 @@ class DataCleaner(TransformerMixin, BaseEstimator):
         X = standardize_data(X, self.dependent_var, self.scaler, not self.scaler_is_fit)
         self.scaler_is_fit = True
 
+        return X
+
+    def inverse_transform(self, X: pd.DataFrame) -> pd.DataFrame:
+        X = unstandardize_data(X, self.dependent_var, self.scaler)
         return X
 
 
