@@ -114,7 +114,7 @@ def _apply_log_transforms(data: pd.DataFrame) -> pd.DataFrame:
 
     data = data.copy()
     for old_col, transformed_col in rename_map.items():
-        data[transformed_col] = np.round(np.log(data[old_col]), 3)
+        data[transformed_col] = np.log(data[old_col])  # type: ignore
 
     return data
 
@@ -142,13 +142,13 @@ def _create_microarchitecture_col(data: pd.DataFrame) -> pd.DataFrame:
         r"(.*) (?:(?:[0-9]|\.|-)+C)? (?:[0-9]|\.|-)+(?:G|M)Hz")
 
     def to_mas(row: pd.Series) -> str:
-        processor_tech: str = row["Processor Technology"]
+        processor_tech: str = row["Processor Technology"]  # type: ignore
 
         if processor_tech in already_mas:
             return processor_tech
 
         # Get rid of numbers from the process name
-        processor = row["Processor"]
+        processor = cast(str, row["Processor"])
         match = remove_numbers_at_end.match(processor)
         if match is None:
             raise ValueError(f"Processor {processor} did not match expected regex")
@@ -163,7 +163,8 @@ def _create_microarchitecture_col(data: pd.DataFrame) -> pd.DataFrame:
         full = row["Processor"]
         name = row["Name"]
         year = row["Year"]
-        print(f"Unknown processor: '{processor}', full name: '{full}' @ {name}, {year}")
+        print(f"Unknown processor: '{processor}' tech '{processor_tech}', " +
+              f"full name: '{full}' @ {name}, {year}")
 
         return "Unknown"
 

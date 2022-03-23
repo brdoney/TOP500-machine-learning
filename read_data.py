@@ -24,16 +24,20 @@ def read_datasets() -> List[pd.DataFrame]:
 
     # Exclude the ~FILENAME file Excel generates for open files and include xls or xlsx files
     # While also extracting the year and month data to support train on past
-    excel_file = re.compile(r"TOP500_(\d+)\.xlsx?")
+    excel_file = re.compile(r"TOP500_(\d{4})(\d{2})\.xlsx?")
 
     all_datasets = []
     for file in top500_dir.iterdir():
         match = excel_file.match(file.name)
         if match is not None:
+            # Extract the date information from the file name
+            date_string = f"{match.group(1)}-{match.group(2)}"
+            date = pd.Timestamp(date_string)
+
             # This is a file we want to process, so read it to dataframe
             # `read_excel` supports PathLike objects, so ignore typing error
             curr_data: pd.DataFrame = pd.read_excel(file, header=0)  # type: ignore
-            curr_data = curr_data.assign(Date=match.group(1))
+            curr_data = curr_data.assign(Date=date)
             all_datasets.append(curr_data)
 
     return all_datasets
